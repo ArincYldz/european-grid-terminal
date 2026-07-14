@@ -1,0 +1,29 @@
+# Refreshes the dashboard forecasts daily and commits the new JSON.
+# Vercel redeploys automatically on push, so the site stays current.
+name: Refresh forecast data
+
+on:
+  schedule:
+    - cron: "45 5 * * *"   # daily 05:45 UTC (after most day-ahead publications)
+  workflow_dispatch: {}      # manual trigger from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python webapp/precompute.py
+      - name: Commit refreshed data
+        run: |
+          git config user.name "forecast-bot"
+          git config user.email "actions@github.com"
+          git add webapp/site/data
+          git diff --cached --quiet || git commit -m "data: daily forecast refresh"
+          git push

@@ -1,0 +1,28 @@
+# Brings up TimescaleDB with a single command:  docker compose up -d
+#
+# Why TimescaleDB and not InfluxDB? (interview answer below, in README/storage.py)
+# In short: our data is relational (price JOIN generation JOIN weather) and
+# needs bitemporal (as-of join) queries. These are where SQL and TimescaleDB
+# are strong; InfluxDB's Flux language is weak on complex JOINs.
+services:
+  timescaledb:
+    image: timescale/timescaledb:2.17.2-pg16
+    container_name: energy_timescaledb
+    environment:
+      POSTGRES_USER: energy
+      POSTGRES_PASSWORD: energy
+      POSTGRES_DB: energy_market
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      # Loads the schema automatically on first container startup:
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U energy -d energy_market"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  timescale_data:
