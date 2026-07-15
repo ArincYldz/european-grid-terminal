@@ -82,9 +82,15 @@ risk and hourly trading signals.
 - `webapp/precompute.py` — runs the engine for EVERY country Energy-Charts
   serves (dynamic discovery, failures skipped) and writes static JSON to
   `webapp/site/data/`. Per country: real gen/load/price + weather window,
-  two 3A models (wind/solar), CQR price quantiles, calibrated risk, signals.
-- `webapp/site/` — fully static frontend (D3 map + hand-rolled SVG charts),
-  no build step. Deployable anywhere static files are served.
+  three LightGBM models (wind / solar / DEMAND), CQR price quantiles,
+  calibrated negative-price risk, hourly signals with Turkish rationale,
+  plus a 14-day HOLDOUT evaluation (generation MAE%, price-band coverage%,
+  strategy-vs-naive backtest edge% and Sharpe) and a 48h forecast-vs-actual
+  replay.
+- `webapp/site/` — fully static frontend (D3 choropleth map colored by a
+  selectable live metric, model-credibility panel, forecast-vs-actual replay
+  charts, signal tooltips), no build step. Deployable anywhere static files
+  are served.
 
 Local run:
 ```bash
@@ -99,6 +105,7 @@ python -m http.server 8942 --directory webapp/site
    `webapp/site` → Framework preset: **Other** (static). Deploy.
 3. Optional freshness: `.github/workflows/refresh-data.yml` re-runs the
    precompute daily and commits the JSON; Vercel auto-redeploys on push.
+   `.github/workflows/ci.yml` runs the full test suite on every push/PR.
 
 ## Tests
 ```bash
