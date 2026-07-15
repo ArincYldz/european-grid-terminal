@@ -1,148 +1,201 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Avrupa Elektrik Piyasası — Yapay Zeka Tahmin Paneli</title>
-<meta name="description" content="Avrupa ülkeleri için yenilenebilir üretim, elektrik fiyatı ve negatif fiyat riski tahminleri. Haritadan ülke seç, tahminlere ve model başarımına bak.">
+<title>European Power Markets — AI Forecast Dashboard</title>
+<meta name="description" content="AI-driven forecasts for European electricity markets: renewable generation, day-ahead price bands, negative-price risk and hourly trading signals — with real out-of-sample model performance.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#f7f6f3; --card:#ffffff; --ink:#1a1a18; --ink2:#5f5e5a; --ink3:#8a8983;
-  --line:#e3e1da; --line2:#cfcdc4; --accent:#185fa5; --accent-bg:#e6f1fb;
-  --wind:#378add; --solar:#ef9f27; --p50:#1d9e75; --band:#9fe1cb;
-  --sell:#639922; --store:#378add; --curtail:#e24b4a; --warn:#ba7517; --good:#3b6d11;
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#161615; --card:#1f1f1e; --ink:#f2f1ec; --ink2:#b6b4ab; --ink3:#84837c;
-    --line:#33322f; --line2:#464540; --accent:#85b7eb; --accent-bg:#0c2c4c; --good:#97c459;
-  }
+  --bg:#0d1117; --bg2:#0a0e13; --card:#151b23; --card2:#1a212b;
+  --ink:#e8ecf1; --ink2:#9aa7b4; --ink3:#5f6b78;
+  --line:#242d38; --line2:#33404e;
+  --accent:#58a6ff; --accent-dim:#1f3a5f;
+  --wind:#58a6ff; --solar:#e8a33d; --p50:#3fd0a4; --band:#3fd0a4;
+  --sell:#3fb950; --store:#58a6ff; --curtail:#f85149; --warn:#d29922; --good:#3fb950;
+  --radius:10px;
 }
 *{box-sizing:border-box}
+html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
-.wrap{max-width:1060px;margin:0 auto;padding:24px 16px 60px}
-h1{font-size:26px;font-weight:600;margin:0 0 4px}
-.sub{color:var(--ink2);font-size:15px;margin:0 0 16px}
-.updated{color:var(--ink3);font-size:13px}
+  font:15px/1.6 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+.topbar{position:sticky;top:0;z-index:50;background:rgba(13,17,23,.92);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1160px;margin:0 auto;padding:14px 20px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.01em}
+.brand .bolt{width:26px;height:26px;border-radius:7px;background:var(--accent-dim);
+  display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:15px}
+.brand small{font-weight:500;color:var(--ink3);font-size:12px;margin-left:2px}
+.topbar .updated{margin-left:auto;color:var(--ink3);font-size:12.5px}
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--good);
+  margin-right:6px;box-shadow:0 0 0 3px rgba(63,185,80,.15)}
+
+.wrap{max-width:1160px;margin:0 auto;padding:28px 20px 70px}
+.hero h1{font-size:24px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px}
+.hero p{color:var(--ink2);font-size:14.5px;margin:0 0 20px;max-width:760px}
+
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px}
-.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 10px}
-.toolbar .lbl{font-size:13px;color:var(--ink2);margin-right:2px}
-.seg{display:inline-flex;border:1px solid var(--line2);border-radius:9px;overflow:hidden}
-.seg button{border:0;background:var(--card);color:var(--ink2);font-size:13px;padding:6px 12px;cursor:pointer}
-.seg button.on{background:var(--accent-bg);color:var(--accent);font-weight:600}
-#map-card{overflow:hidden;position:relative}
-#legend{position:absolute;right:12px;bottom:12px;background:var(--card);border:1px solid var(--line);
-  border-radius:8px;padding:8px 10px;font-size:11.5px;color:var(--ink2)}
-#legend .row{display:flex;align-items:center;gap:6px;margin-top:3px}
-#legend .sw{width:26px;height:10px;border-radius:2px}
-#chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 6px}
-.chip{padding:5px 13px;border-radius:18px;border:1px solid var(--line2);background:var(--card);
-  color:var(--ink2);font-size:13px;cursor:pointer;transition:all .15s}
+.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:0 0 12px}
+.toolbar .lbl{font-size:12px;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.seg{display:inline-flex;background:var(--card);border:1px solid var(--line2);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--ink2);font:inherit;font-size:13px;
+  padding:7px 14px;cursor:pointer;transition:all .15s}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--accent-dim);color:var(--accent);font-weight:600}
+
+#map-card{overflow:hidden;position:relative;background:var(--bg2)}
+#legend{position:absolute;right:14px;bottom:14px;background:rgba(21,27,35,.95);
+  border:1px solid var(--line2);border-radius:9px;padding:9px 12px;font-size:11.5px;color:var(--ink2)}
+#legend .t{font-weight:600;color:var(--ink);margin-bottom:4px}
+#legend .row{display:flex;align-items:center;gap:5px}
+#legend .sw{width:24px;height:9px;border-radius:2px}
+#map-tip{position:absolute;pointer-events:none;background:rgba(21,27,35,.97);border:1px solid var(--line2);
+  border-radius:8px;padding:7px 11px;font-size:12.5px;display:none;z-index:5;white-space:nowrap}
+#map-tip .n{font-weight:600}
+#map-tip .v{color:var(--ink2)}
+
+#chips{display:flex;flex-wrap:wrap;gap:7px;margin:16px 0 4px}
+.chip{padding:5px 13px;border-radius:16px;border:1px solid var(--line2);background:var(--card);
+  color:var(--ink2);font:inherit;font-size:12.5px;cursor:pointer;transition:all .15s}
 .chip:hover{border-color:var(--accent);color:var(--accent)}
-.chip.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
-#panel{display:none;margin-top:20px}
-.panel-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin:0 0 12px}
-.panel-title{font-size:21px;font-weight:600}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
-.kpi .l{font-size:13px;color:var(--ink2);margin-bottom:4px}
-.kpi .v{font-size:24px;font-weight:600}
-.section-label{font-size:13px;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em;margin:20px 0 8px}
-#cred{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:6px}
-.cred{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
-.cred .l{font-size:12.5px;color:var(--ink2);margin-bottom:3px}
-.cred .v{font-size:20px;font-weight:600}
-.cred .h{font-size:11.5px;color:var(--ink3);margin-top:2px}
-.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:12px}
-.chart-card{padding:14px 18px}
-.chart-card h3{font-size:16px;font-weight:600;margin:0 0 2px}
-.legend-in{font-size:12px;color:var(--ink3);margin:0 0 8px}
+.chip.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:600}
+
+#panel{display:none;margin-top:28px}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.panel-title{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.panel-title .bzn{font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-dim);
+  border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:2px}
+.p-updated{color:var(--ink3);font-size:12.5px}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.kpi .l{font-size:11.5px;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px}
+.kpi .v{font-size:23px;font-weight:700;letter-spacing:-.01em}
+.kpi .u{font-size:13px;color:var(--ink2);font-weight:500}
+
+.section-label{font-size:12px;color:var(--ink3);text-transform:uppercase;letter-spacing:.09em;font-weight:600;
+  margin:26px 0 10px;display:flex;align-items:center;gap:10px}
+.section-label:after{content:"";flex:1;height:1px;background:var(--line)}
+
+#cred{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.cred{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:13px 15px}
+.cred .l{font-size:11.5px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:5px}
+.cred .v{font-size:21px;font-weight:700}
+.cred .h{font-size:11.5px;color:var(--ink3);margin-top:3px}
+
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px}
+.chart-card{padding:16px 18px}
+.chart-card h3{font-size:14.5px;font-weight:600;margin:0 0 3px}
+.chart-card h3 small{font-weight:400;font-size:11.5px;color:var(--ink3)}
+.legend-in{font-size:11.5px;color:var(--ink3);margin:0 0 10px}
 .legend-in b{font-weight:400}
 svg{display:block;width:100%}
-.footer{margin-top:26px;color:var(--ink3);font-size:12.5px;line-height:1.7}
-.footer a{color:var(--accent)}
+#sig-hint{font-size:12.5px;color:var(--ink2);min-height:20px;margin-top:8px;
+  border-left:2px solid var(--line2);padding-left:10px}
+
+.footer{margin-top:36px;color:var(--ink3);font-size:12px;line-height:1.8;
+  border-top:1px solid var(--line);padding-top:18px}
+#loading{color:var(--ink3);font-size:14px;padding:10px 0}
 .sigSELL{color:var(--sell)} .sigSTORE{color:var(--store)}
 .sigCURTAIL{color:var(--curtail)} .sigDISCHARGE{color:var(--store)} .sigHOLD{color:var(--ink3)}
-#loading{color:var(--ink3);font-size:14px;padding:8px 0}
+@media (max-width:640px){.hero h1{font-size:20px}.panel-title{font-size:17px}}
 </style>
 </head>
 <body>
+
+<div class="topbar"><div class="topbar-in">
+  <span class="brand"><span class="bolt">⚡</span>GridPulse <small>European Power Markets</small></span>
+  <span class="updated" id="updated"></span>
+</div></div>
+
 <div class="wrap">
-  <h1>Avrupa elektrik piyasası — yapay zeka tahmin paneli</h1>
-  <p class="sub">Haritadan bir ülkeye tıkla: yenilenebilir üretim tahmini, fiyat belirsizlik bandı,
-     negatif fiyat riski, saatlik ticaret sinyali ve modelin gerçek başarımı.
-     <span class="updated" id="updated"></span></p>
+  <div class="hero">
+    <h1>AI forecast dashboard for European electricity markets</h1>
+    <p>Click a country on the map to see its renewable generation forecast, day-ahead price
+       uncertainty band, negative-price risk and hourly trading signals — together with the
+       model's real out-of-sample performance.</p>
+  </div>
 
   <div class="toolbar" id="metric-toolbar" style="display:none">
-    <span class="lbl">Haritayı renklendir:</span>
+    <span class="lbl">Color map by</span>
     <span class="seg" id="metric-seg">
-      <button data-m="last_price_eur_mwh" class="on">Fiyat</button>
-      <button data-m="max_neg_risk_pct">Negatif risk</button>
-      <button data-m="renewable_share_pct">Yenilenebilir oranı</button>
+      <button data-m="last_price_eur_mwh" class="on">Price</button>
+      <button data-m="max_neg_risk_pct">Negative-price risk</button>
+      <button data-m="renewable_share_pct">Renewable share</button>
     </span>
   </div>
 
   <div class="card" id="map-card">
     <div id="map"></div>
     <div id="legend"></div>
+    <div id="map-tip"></div>
   </div>
   <div id="chips"></div>
-  <div id="loading">Veriler yükleniyor…</div>
+  <div id="loading">Loading data…</div>
 
   <div id="panel">
     <div class="panel-head">
-      <div class="panel-title" id="p-title"></div>
-      <div class="updated" id="p-updated"></div>
-    </div>
-    <div class="kpis">
-      <div class="kpi"><div class="l">Son bilinen fiyat</div><div class="v" id="k-price"></div></div>
-      <div class="kpi"><div class="l">24s ort. üretim tahmini</div><div class="v" id="k-gen"></div></div>
-      <div class="kpi"><div class="l">Maks. negatif fiyat riski</div><div class="v" id="k-risk"></div></div>
-      <div class="kpi"><div class="l">Sıradaki sinyal</div><div class="v" id="k-sig"></div></div>
+      <div class="panel-title"><span id="p-name"></span><span class="bzn" id="p-bzn"></span></div>
+      <div class="p-updated" id="p-updated"></div>
     </div>
 
-    <div class="section-label" id="cred-label">Model başarımı — son 14 gün, geriye dönük test</div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Last known price</div><div class="v num" id="k-price"></div></div>
+      <div class="kpi"><div class="l">Avg. generation, next 24 h</div><div class="v num" id="k-gen"></div></div>
+      <div class="kpi"><div class="l">Peak negative-price risk</div><div class="v num" id="k-risk"></div></div>
+      <div class="kpi"><div class="l">Next signal</div><div class="v" id="k-sig"></div></div>
+    </div>
+
+    <div class="section-label" id="cred-label">Model performance — 14-day out-of-sample backtest</div>
     <div id="cred"></div>
 
-    <div class="section-label">24 saatlik tahmin</div>
+    <div class="section-label">Next 24 hours — forecast</div>
     <div class="charts">
       <div class="card chart-card">
-        <h3>Yenilenebilir üretim tahmini</h3>
-        <div class="legend-in"><b style="color:var(--wind)">■</b> rüzgar &nbsp; <b style="color:var(--solar)">■</b> güneş (MW)</div>
+        <h3>Renewable generation forecast</h3>
+        <div class="legend-in"><b style="color:var(--wind)">■</b> wind &nbsp; <b style="color:var(--solar)">■</b> solar (MW)</div>
         <svg id="c-gen" viewBox="0 0 560 170"></svg>
       </div>
       <div class="card chart-card">
-        <h3>Fiyat tahmini — belirsizlik bandı</h3>
-        <div class="legend-in"><b style="color:var(--p50)">■</b> P50 &nbsp; <b style="color:var(--band)">■</b> P10–P90 &nbsp;·&nbsp; 0 altı = negatif fiyat</div>
+        <h3>Price forecast — uncertainty band</h3>
+        <div class="legend-in"><b style="color:var(--p50)">■</b> P50 &nbsp; <b style="color:var(--band)">■</b> P10–P90 &nbsp;·&nbsp; below 0 = negative prices</div>
         <svg id="c-price" viewBox="0 0 560 170"></svg>
       </div>
     </div>
     <div class="charts">
       <div class="card chart-card">
-        <h3>Saatlik sinyal <span style="font-weight:400;font-size:12px;color:var(--ink3)">— üstüne gel, gerekçeyi gör</span></h3>
-        <div class="legend-in"><b style="color:var(--sell)">■</b> SAT &nbsp; <b style="color:var(--store)">■</b> DEPOLA/DEŞARJ &nbsp; <b style="color:var(--curtail)">■</b> DURDUR</div>
+        <h3>Hourly trading signal <small>— hover a bar for the rationale</small></h3>
+        <div class="legend-in"><b style="color:var(--sell)">■</b> SELL &nbsp; <b style="color:var(--store)">■</b> STORE / DISCHARGE &nbsp; <b style="color:var(--curtail)">■</b> CURTAIL</div>
         <svg id="c-sig" viewBox="0 0 560 64"></svg>
-        <div id="sig-hint" style="font-size:12.5px;color:var(--ink2);min-height:20px;margin-top:6px"></div>
+        <div id="sig-hint"></div>
       </div>
       <div class="card chart-card">
-        <h3>Son 48 saat — gerçekleşen fiyat</h3>
-        <div class="legend-in">borsa gün-öncesi fiyatı (€/MWh)</div>
+        <h3>Last 48 hours — realized price</h3>
+        <div class="legend-in">exchange day-ahead price (€/MWh)</div>
         <svg id="c-recent" viewBox="0 0 560 64"></svg>
       </div>
     </div>
 
     <div id="replay-wrap">
-      <div class="section-label">Tahmin vs gerçekleşen — son 48 saat (geriye dönük test)</div>
+      <div class="section-label">Forecast vs actual — last 48 h of the backtest window</div>
       <div class="charts">
         <div class="card chart-card">
-          <h3>Üretim: tahmin vs gerçek</h3>
-          <div class="legend-in"><b style="color:var(--ink2)">▬</b> gerçekleşen &nbsp; <b style="color:var(--wind)">▬</b> tahmin (MW)</div>
+          <h3>Generation: forecast vs actual</h3>
+          <div class="legend-in"><b style="color:var(--ink2)">▬</b> actual &nbsp; <b style="color:var(--wind)">▬</b> forecast (MW)</div>
           <svg id="c-rgen" viewBox="0 0 560 150"></svg>
         </div>
         <div class="card chart-card">
-          <h3>Fiyat: tahmin bandı vs gerçek</h3>
-          <div class="legend-in"><b style="color:var(--ink2)">▬</b> gerçekleşen &nbsp; <b style="color:var(--p50)">▬</b> P50 &nbsp; <b style="color:var(--band)">■</b> P10–P90</div>
+          <h3>Price: forecast band vs actual</h3>
+          <div class="legend-in"><b style="color:var(--ink2)">▬</b> actual &nbsp; <b style="color:var(--p50)">▬</b> P50 &nbsp; <b style="color:var(--band)">■</b> P10–P90</div>
           <svg id="c-rprice" viewBox="0 0 560 150"></svg>
         </div>
       </div>
@@ -150,11 +203,12 @@ svg{display:block;width:100%}
   </div>
 
   <p class="footer">
-    Veri: <a href="https://api.energy-charts.info" target="_blank" rel="noopener">Energy-Charts</a> (Fraunhofer ISE, CC BY 4.0)
-    ve <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>.
-    Tahminler LightGBM tabanlı iki aşamalı model (üretim + talep → fiyat kantilleri + kalibre negatif fiyat riski,
-    conformal kalibrasyon) ile üretilmiştir. Başarım metrikleri son 14 günün geriye dönük (out-of-sample) testinden gelir.
-    Bu site bir portföy/araştırma projesidir; yatırım tavsiyesi değildir.
+    Data: <a href="https://api.energy-charts.info" target="_blank" rel="noopener">Energy-Charts</a>
+    (Fraunhofer ISE, CC BY 4.0) and <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>.
+    Forecasts are produced by a two-stage LightGBM pipeline — wind, solar and demand models feeding
+    conformalized quantile price regression and a calibrated negative-price classifier.
+    Performance metrics come from a genuine 14-day out-of-sample backtest, refreshed with the data.
+    Research / portfolio project — not investment advice.
   </p>
 </div>
 
@@ -162,21 +216,28 @@ svg{display:block;width:100%}
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script>
 (function(){
-  var isDark = matchMedia("(prefers-color-scheme: dark)").matches;
-  var COUNTRIES = {}, byName = {}, mapPaths = null, metric = "last_price_eur_mwh";
-  var RAMP = isDark ? ["#0c2c4c","#154a80","#2673c0","#5aa0e6","#a9d0f5"]
-                    : ["#e6f1fb","#b5d4f4","#85b7eb","#378add","#185fa5"];
-  var METRIC_LABEL = {last_price_eur_mwh:"Fiyat (€/MWh)", max_neg_risk_pct:"Negatif risk (%)",
-                      renewable_share_pct:"Yenilenebilir (%)"};
+  var COUNTRIES={}, byName={}, mapPaths=null, metric="last_price_eur_mwh";
+  var RAMP=["#12263f","#1b4472","#2a68ab","#4b90d8","#8fc1f0"];
+  var METRIC_LABEL={last_price_eur_mwh:"Price (€/MWh)", max_neg_risk_pct:"Negative-price risk (%)",
+                    renewable_share_pct:"Renewable share (%)"};
 
   function fmtTime(iso){var d=new Date(iso);
-    return d.toLocaleString("tr-TR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
-  function hourLabel(iso){return new Date(iso).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});}
-  function trSig(s){return {SELL:"SAT",STORE:"DEPOLA",DISCHARGE:"DEŞARJ",CURTAIL:"DURDUR",HOLD:"BEKLE"}[s]||s;}
+    return d.toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}
+  function hourLabel(iso){return new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});}
+
+  function reasonFor(sig,p50,risk){
+    var e=Math.round(p50);
+    if(sig==="SELL")return "Expected price "+e+" €/MWh — selling is the most profitable action.";
+    if(sig==="STORE")return "Price is low ("+e+" €/MWh) — store now, sell later at a higher price.";
+    if(sig==="DISCHARGE")return "High price ("+e+" €/MWh) — time to sell from the battery.";
+    if(sig==="CURTAIL")return "Price in negative territory ("+e+" €/MWh, risk "+Math.round(risk)+"%) — curtail production.";
+    return "No generation — no action.";
+  }
 
   var SVGNS="http://www.w3.org/2000/svg";
   function el(t,a){var e=document.createElementNS(SVGNS,t);for(var k in a)e.setAttribute(k,a[k]);return e;}
-  function txt(x,y,s,fill,size,anchor){var t=el("text",{x:x,y:y,fill:fill,"font-size":size||10,"text-anchor":anchor||"start"});t.textContent=s;return t;}
+  function txt(x,y,s,fill,size,anchor){var t=el("text",{x:x,y:y,fill:fill,"font-size":size||10,
+    "text-anchor":anchor||"start","font-family":"Inter,sans-serif"});t.textContent=s;return t;}
   function clear(id){var s=document.getElementById(id);while(s.firstChild)s.removeChild(s.firstChild);return s;}
   var cs=getComputedStyle(document.documentElement);
   function cvar(n){return cs.getPropertyValue(n).trim();}
@@ -187,35 +248,39 @@ svg{display:block;width:100%}
     var x=function(i){return pl+(W-pl-pr)*i/(n-1);},y=function(v){return pt+(H-pt-pb)*(1-v/maxV);};
     for(var g=0;g<4;g++){var v=maxV*g/3;
       svg.appendChild(el("line",{x1:pl,y1:y(v),x2:W-pr,y2:y(v),stroke:cvar("--line")}));
-      svg.appendChild(txt(pl-6,y(v)+3,Math.round(v/100)/10+" GW",cvar("--ink3"),10,"end"));}
+      svg.appendChild(txt(pl-6,y(v)+3,(Math.round(v/100)/10)+" GW",cvar("--ink3"),10,"end"));}
     function area(top,base,fill){var d="M"+x(0)+","+y(base[0]);
       for(var i=0;i<n;i++)d+=" L"+x(i)+","+y(top[i]);
       for(var j=n-1;j>=0;j--)d+=" L"+x(j)+","+y(base[j]);
-      svg.appendChild(el("path",{d:d+" Z",fill:fill,"fill-opacity":.85}));}
+      svg.appendChild(el("path",{d:d+" Z",fill:fill,"fill-opacity":.8}));}
     var zero=hours.map(function(){return 0;}),stack=wind.map(function(w,i){return w+solar[i];});
     area(stack,wind,cvar("--solar"));area(wind,zero,cvar("--wind"));
     [0,6,12,18,n-1].forEach(function(i){if(i<n)svg.appendChild(txt(x(i),H-7,hourLabel(hours[i]),cvar("--ink3"),10,"middle"));});
   }
+
   function priceBand(id,hours,p10,p50,p90,actual){
-    var svg=clear(id),W=560,H=170,pl=46,pr=8,pt=10,pb=24,n=hours.length;
+    var svg=clear(id),W=560,H=id.indexOf("r")===2?150:170,pl=46,pr=8,pt=10,pb=24,n=hours.length;
     var lows=p10.concat(actual||[]),highs=p90.concat(actual||[]);
     var vmin=Math.min(0,Math.min.apply(null,lows))-8,vmax=Math.max.apply(null,highs)+8;
     var x=function(i){return pl+(W-pl-pr)*i/(n-1);},y=function(v){return pt+(H-pt-pb)*(1-(v-vmin)/(vmax-vmin));};
     for(var g=0;g<=4;g++){var v=Math.round(vmin+(vmax-vmin)*g/4);
       svg.appendChild(el("line",{x1:pl,y1:y(v),x2:W-pr,y2:y(v),stroke:cvar("--line")}));
       svg.appendChild(txt(pl-6,y(v)+3,v+"",cvar("--ink3"),10,"end"));}
-    if(vmin<0)svg.appendChild(el("line",{x1:pl,y1:y(0),x2:W-pr,y2:y(0),stroke:cvar("--curtail"),"stroke-width":1.2,"stroke-dasharray":"5 4"}));
+    if(vmin<0)svg.appendChild(el("line",{x1:pl,y1:y(0),x2:W-pr,y2:y(0),stroke:cvar("--curtail"),
+      "stroke-width":1.1,"stroke-dasharray":"5 4","stroke-opacity":.8}));
     var d="M"+x(0)+","+y(p90[0]);
     for(var i=0;i<n;i++)d+=" L"+x(i)+","+y(p90[i]);
     for(var j=n-1;j>=0;j--)d+=" L"+x(j)+","+y(p10[j]);
-    svg.appendChild(el("path",{d:d+" Z",fill:cvar("--band"),"fill-opacity":.5}));
-    function line(arr,color,w,dash){var l="M"+x(0)+","+y(arr[0]);
+    svg.appendChild(el("path",{d:d+" Z",fill:cvar("--band"),"fill-opacity":.18}));
+    function line(arr,color,w){var l="M"+x(0)+","+y(arr[0]);
       for(var k=1;k<n;k++)l+=" L"+x(k)+","+y(arr[k]);
-      var p=el("path",{d:l,fill:"none",stroke:color,"stroke-width":w});if(dash)p.setAttribute("stroke-dasharray",dash);svg.appendChild(p);}
+      svg.appendChild(el("path",{d:l,fill:"none",stroke:color,"stroke-width":w,"stroke-linejoin":"round"}));}
     line(p50,cvar("--p50"),2);
-    if(actual)line(actual,cvar("--ink2"),1.8);
-    [0,6,12,18,n-1].forEach(function(i){if(i<n)svg.appendChild(txt(x(i),H-7,hourLabel(hours[i]),cvar("--ink3"),10,"middle"));});
+    if(actual)line(actual,cvar("--ink2"),1.7);
+    var ticks=n>30?[0,12,24,36,n-1]:[0,6,12,18,n-1];
+    ticks.forEach(function(i){if(i<n)svg.appendChild(txt(x(i),H-7,hourLabel(hours[i]),cvar("--ink3"),10,"middle"));});
   }
+
   function twoLines(id,hours,actual,forecast,fcColor){
     var svg=clear(id),W=560,H=150,pl=46,pr=8,pt=10,pb=22,n=hours.length;
     var all=actual.concat(forecast),vmax=Math.max.apply(null,all)*1.08||1,vmin=Math.min(0,Math.min.apply(null,all));
@@ -224,24 +289,27 @@ svg{display:block;width:100%}
       svg.appendChild(el("line",{x1:pl,y1:y(v),x2:W-pr,y2:y(v),stroke:cvar("--line")}));
       svg.appendChild(txt(pl-6,y(v)+3,Math.round(v)+"",cvar("--ink3"),10,"end"));}
     function line(arr,color,w){var l="M"+x(0)+","+y(arr[0]);for(var k=1;k<n;k++)l+=" L"+x(k)+","+y(arr[k]);
-      svg.appendChild(el("path",{d:l,fill:"none",stroke:color,"stroke-width":w}));}
-    line(actual,cvar("--ink2"),1.8);line(forecast,fcColor,1.8);
+      svg.appendChild(el("path",{d:l,fill:"none",stroke:color,"stroke-width":w,"stroke-linejoin":"round"}));}
+    line(actual,cvar("--ink2"),1.7);line(forecast,fcColor,1.8);
     [0,12,24,36,n-1].forEach(function(i){if(i<n)svg.appendChild(txt(x(i),H-6,hourLabel(hours[i]),cvar("--ink3"),10,"middle"));});
   }
-  function signalStrip(id,hours,signals,reasons){
+
+  function signalStrip(id,hours,signals,p50,risk){
     var svg=clear(id),W=560,pl=8,pr=8,n=hours.length,gap=3,cw=(W-pl-pr-(n-1)*gap)/n,top=6,h=26;
-    var col={SELL:cvar("--sell"),STORE:cvar("--store"),DISCHARGE:cvar("--store"),CURTAIL:cvar("--curtail"),HOLD:cvar("--line2")};
+    var col={SELL:cvar("--sell"),STORE:cvar("--store"),DISCHARGE:cvar("--store"),
+             CURTAIL:cvar("--curtail"),HOLD:cvar("--line2")};
     var hint=document.getElementById("sig-hint");
     for(var i=0;i<n;i++){(function(i){
       var xx=pl+i*(cw+gap);
-      var r=el("rect",{x:xx,y:top,width:cw,height:h,rx:2,fill:col[signals[i]]||cvar("--line2"),style:"cursor:pointer"});
-      var reason=(reasons&&reasons[i])||trSig(signals[i]);
-      var tp=el("title",{});tp.textContent=hourLabel(hours[i])+" — "+reason;r.appendChild(tp);
-      r.addEventListener("mouseover",function(){hint.textContent=hourLabel(hours[i])+" · "+trSig(signals[i])+" — "+reason;});
+      var reason=reasonFor(signals[i],p50[i],risk[i]);
+      var r=el("rect",{x:xx,y:top,width:cw,height:h,rx:2.5,fill:col[signals[i]]||cvar("--line2"),style:"cursor:pointer"});
+      var tp=el("title",{});tp.textContent=hourLabel(hours[i])+" — "+signals[i]+": "+reason;r.appendChild(tp);
+      r.addEventListener("mouseover",function(){hint.textContent=hourLabel(hours[i])+" · "+signals[i]+" — "+reason;});
       svg.appendChild(r);
       if(i%3===0)svg.appendChild(txt(xx+cw/2,top+h+16,hourLabel(hours[i]).slice(0,2),cvar("--ink3"),10,"middle"));
     })(i);}
   }
+
   function recentLine(id,hours,price){
     var svg=clear(id),W=560,H=64,pl=46,pr=8,pt=6,pb=16,n=hours.length;
     var vmin=Math.min(0,Math.min.apply(null,price)),vmax=Math.max.apply(null,price)+5;
@@ -250,51 +318,53 @@ svg{display:block;width:100%}
     svg.appendChild(txt(pl-6,y(vmin)-1,Math.round(vmin)+"",cvar("--ink3"),10,"end"));
     if(vmin<0)svg.appendChild(el("line",{x1:pl,y1:y(0),x2:W-pr,y2:y(0),stroke:cvar("--curtail"),"stroke-dasharray":"4 3"}));
     var d="M"+x(0)+","+y(price[0]);for(var i=1;i<n;i++)d+=" L"+x(i)+","+y(price[i]);
-    svg.appendChild(el("path",{d:d,fill:"none",stroke:cvar("--accent"),"stroke-width":1.8}));
+    svg.appendChild(el("path",{d:d,fill:"none",stroke:cvar("--accent"),"stroke-width":1.7}));
   }
 
   function credCard(label,value,hint){
     var d=document.createElement("div");d.className="cred";
-    d.innerHTML='<div class="l">'+label+'</div><div class="v">'+value+'</div><div class="h">'+hint+'</div>';
+    d.innerHTML='<div class="l">'+label+'</div><div class="v num">'+value+'</div><div class="h">'+hint+'</div>';
     return d;
   }
   function renderCred(m){
     var box=clear("cred");
-    document.getElementById("cred-label").style.display=m?"block":"none";
+    document.getElementById("cred-label").style.display=m?"flex":"none";
     document.getElementById("replay-wrap").style.display=m?"block":"none";
     if(!m)return;
-    box.appendChild(credCard("Üretim tahmini hatası","%"+m.gen_mae_pct,"ortalama üretime oranla (MAE)"));
+    box.appendChild(credCard("Generation error (MAE)",m.gen_mae_pct+"%","relative to mean output"));
     var covOk=Math.abs(m.price_coverage_pct-80)<=8;
-    box.appendChild(credCard("Fiyat bandı kapsaması","%"+m.price_coverage_pct,
-      (covOk?"hedef %80'e yakın ✓":"hedef %80")));
+    box.appendChild(credCard("Price band coverage",m.price_coverage_pct+"%",
+      covOk?"close to the 80% target ✓":"target: 80%"));
     var eColor=m.backtest_edge_pct>=0?"var(--good)":"var(--curtail)";
-    box.appendChild(credCard("Strateji kenarı",'<span style="color:'+eColor+'">'+(m.backtest_edge_pct>=0?"+":"")+m.backtest_edge_pct+"%</span>","naif 'hep sat'a karşı P&L"));
-    box.appendChild(credCard("Sharpe oranı",m.backtest_sharpe,"risk-ayarlı getiri (yıllık)"));
+    box.appendChild(credCard("Strategy edge",'<span style="color:'+eColor+'">'+
+      (m.backtest_edge_pct>=0?"+":"")+m.backtest_edge_pct+"%</span>","P&L vs always-sell baseline"));
+    box.appendChild(credCard("Sharpe ratio",m.backtest_sharpe,"risk-adjusted, annualized"));
   }
 
   function showCountry(code){
     document.querySelectorAll(".chip").forEach(function(c){c.classList.toggle("active",c.dataset.code===code);});
-    if(mapPaths)mapPaths.attr("stroke-width",function(f){return byName[f.properties.name]===code?2:.6;})
-      .attr("stroke",function(f){return byName[f.properties.name]===code?(isDark?"#e6f1fb":"#0c2c4c"):(isDark?"rgba(255,255,255,.18)":"#fff");});
+    if(mapPaths)mapPaths.attr("stroke-width",function(f){return byName[f.properties.name]===code?1.8:.7;})
+      .attr("stroke",function(f){return byName[f.properties.name]===code?"#e8ecf1":"#0d1117";});
     fetch("data/"+code+".json").then(function(r){return r.json();}).then(function(d){
       document.getElementById("panel").style.display="block";
-      document.getElementById("p-title").textContent=d.name_tr+" · elektrik piyasası ("+d.bzn+")";
-      document.getElementById("p-updated").textContent="model güncellemesi: "+fmtTime(d.updated_utc);
-      document.getElementById("k-price").textContent=d.kpis.last_price_eur_mwh+" €/MWh";
-      document.getElementById("k-gen").textContent=d.kpis.gen_forecast_gw+" GW";
-      var rk=document.getElementById("k-risk");rk.textContent="%"+d.kpis.max_neg_risk_pct;
+      document.getElementById("p-name").textContent=d.name_en+" power market";
+      document.getElementById("p-bzn").textContent=d.bzn;
+      document.getElementById("p-updated").textContent="model updated "+fmtTime(d.updated_utc)+" UTC";
+      document.getElementById("k-price").innerHTML=d.kpis.last_price_eur_mwh+' <span class="u">€/MWh</span>';
+      document.getElementById("k-gen").innerHTML=d.kpis.gen_forecast_gw+' <span class="u">GW</span>';
+      var rk=document.getElementById("k-risk");rk.textContent=d.kpis.max_neg_risk_pct+"%";
       rk.style.color=d.kpis.max_neg_risk_pct>=25?cvar("--warn"):"inherit";
-      var sg=document.getElementById("k-sig");sg.textContent=trSig(d.kpis.next_signal);sg.className="v sig"+d.kpis.next_signal;
+      var sg=document.getElementById("k-sig");sg.textContent=d.kpis.next_signal;sg.className="v sig"+d.kpis.next_signal;
       renderCred(d.metrics);
       var f=d.forecast;
       stackedArea("c-gen",f.hours,f.wind_mw,f.solar_mw);
       priceBand("c-price",f.hours,f.p10,f.p50,f.p90,null);
-      signalStrip("c-sig",f.hours,f.signal,f.signal_reason);
-      document.getElementById("sig-hint").textContent = f.signal_reason&&f.signal_reason[0] ? ("Şimdi: "+f.signal_reason[0]) : "";
+      signalStrip("c-sig",f.hours,f.signal,f.p50,f.neg_risk_pct);
+      document.getElementById("sig-hint").textContent="Now: "+reasonFor(f.signal[0],f.p50[0],f.neg_risk_pct[0]);
       recentLine("c-recent",d.recent.hours,d.recent.price_eur_mwh);
       if(d.replay){
         twoLines("c-rgen",d.replay.hours,d.replay.gen_actual_mw,d.replay.gen_forecast_mw,cvar("--wind"));
-        priceBand("c-rprice",d.replay.hours,d.replay.price_p10,d.replay.price_p90.map(function(v){return v;}),d.replay.price_p50,d.replay.price_actual);
+        priceBand("c-rprice",d.replay.hours,d.replay.price_p10,d.replay.price_p50,d.replay.price_p90,d.replay.price_actual);
       }
       document.getElementById("panel").scrollIntoView({behavior:"smooth",block:"nearest"});
     });
@@ -304,13 +374,14 @@ svg{display:block;width:100%}
     if(!mapPaths)return;
     var vals=[];for(var k in COUNTRIES)vals.push(COUNTRIES[k].kpis[metric]);
     var lo=Math.min.apply(null,vals),hi=Math.max.apply(null,vals);
-    function color(v){var t=(hi>lo)?(v-lo)/(hi-lo):0.5;var i=Math.min(RAMP.length-1,Math.max(0,Math.floor(t*RAMP.length)));return RAMP[i];}
-    mapPaths.attr("fill",function(f){var c=byName[f.properties.name];return c?color(COUNTRIES[c].kpis[metric]):(isDark?"#262624":"#eceae3");});
+    function color(v){var t=(hi>lo)?(v-lo)/(hi-lo):0.5;
+      var i=Math.min(RAMP.length-1,Math.max(0,Math.floor(t*RAMP.length)));return RAMP[i];}
+    mapPaths.attr("fill",function(f){var c=byName[f.properties.name];
+      return c?color(COUNTRIES[c].kpis[metric]):"transparent";});
     var lg=document.getElementById("legend");
-    var rows='<div style="font-weight:600;color:var(--ink)">'+METRIC_LABEL[metric]+'</div>';
-    rows+='<div class="row"><span>'+Math.round(lo)+'</span>';
+    var rows='<div class="t">'+METRIC_LABEL[metric]+'</div><div class="row"><span class="num">'+Math.round(lo)+'</span>';
     RAMP.forEach(function(c){rows+='<span class="sw" style="background:'+c+'"></span>';});
-    rows+='<span>'+Math.round(hi)+'</span></div>';
+    rows+='<span class="num">'+Math.round(hi)+'</span></div>';
     lg.innerHTML=rows;
   }
 
@@ -324,38 +395,50 @@ svg{display:block;width:100%}
   fetch("data/countries.json").then(function(r){return r.json();}).then(function(idx){
     document.getElementById("loading").style.display="none";
     document.getElementById("metric-toolbar").style.display="flex";
-    document.getElementById("updated").textContent="Son güncelleme: "+fmtTime(idx.updated_utc)+" (UTC).";
+    document.getElementById("updated").innerHTML='<span class="live-dot"></span>data updated '+fmtTime(idx.updated_utc)+" UTC";
     var chips=document.getElementById("chips");
-    idx.countries.sort(function(a,b){return a.name_tr.localeCompare(b.name_tr,"tr");}).forEach(function(c){
+    idx.countries.sort(function(a,b){return a.name_en.localeCompare(b.name_en);}).forEach(function(c){
       COUNTRIES[c.code]=c;byName[c.name_en]=c.code;
-      var b=document.createElement("button");b.className="chip";b.dataset.code=c.code;b.textContent=c.name_tr;
+      var b=document.createElement("button");b.className="chip";b.dataset.code=c.code;b.textContent=c.name_en;
       b.onclick=function(){showCountry(c.code);};chips.appendChild(b);
     });
     drawMap();
-  }).catch(function(){document.getElementById("loading").textContent="Veri yüklenemedi. precompute.py çalıştırıldı mı?";});
+  }).catch(function(){document.getElementById("loading").textContent="Could not load data. Has precompute.py been run?";});
 
   function drawMap(){
     d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(function(world){
       var feats=topojson.feature(world,world.objects.countries).features;
+      // Render ONLY the countries we have data for — no world backdrop.
       var euFeats=feats.filter(function(f){return byName[f.properties.name]!==undefined;});
       if(!euFeats.length)return;
-      var W=1030,H=560;
-      var proj=d3.geoMercator().fitExtent([[14,14],[W-14,H-14]],{type:"FeatureCollection",features:euFeats});
+      var W=1120,H=580;
+      var proj=d3.geoMercator().fitExtent([[18,18],[W-18,H-18]],
+        {type:"FeatureCollection",features:euFeats});
       var path=d3.geoPath(proj);
-      var svg=d3.select("#map").append("svg").attr("viewBox","0 0 "+W+" "+H).attr("width","100%").style("display","block");
-      mapPaths=svg.selectAll("path").data(feats).join("path")
-        .attr("d",path).attr("stroke",isDark?"rgba(255,255,255,.18)":"#fff").attr("stroke-width",.6)
-        .style("cursor",function(f){return byName[f.properties.name]?"pointer":"default";})
-        .on("mouseover",function(e,f){if(byName[f.properties.name])d3.select(this).attr("stroke-width",1.4);})
-        .on("mouseout",function(e,f){var c=byName[f.properties.name];if(c&&!document.querySelector('.chip.active[data-code="'+c+'"]'))d3.select(this).attr("stroke-width",.6);})
+      var svg=d3.select("#map").append("svg").attr("viewBox","0 0 "+W+" "+H)
+        .attr("width","100%").style("display","block");
+      var tip=document.getElementById("map-tip"), mapCard=document.getElementById("map-card");
+      mapPaths=svg.selectAll("path").data(euFeats).join("path")
+        .attr("d",path).attr("stroke","#0d1117").attr("stroke-width",.7)
+        .style("cursor","pointer").style("transition","fill-opacity .15s")
+        .on("mousemove",function(e,f){
+          var c=byName[f.properties.name];if(!c)return;
+          d3.select(this).attr("fill-opacity",.82);
+          var k=COUNTRIES[c].kpis, r=mapCard.getBoundingClientRect();
+          tip.style.display="block";
+          tip.style.left=Math.min(e.clientX-r.left+14,r.width-200)+"px";
+          tip.style.top=(e.clientY-r.top+14)+"px";
+          tip.innerHTML='<div class="n">'+COUNTRIES[c].name_en+'</div>'+
+            '<div class="v num">'+k.last_price_eur_mwh+' €/MWh · risk '+k.max_neg_risk_pct+'% · signal '+k.next_signal+'</div>';
+        })
+        .on("mouseout",function(){d3.select(this).attr("fill-opacity",1);tip.style.display="none";})
         .on("click",function(e,f){var cc=byName[f.properties.name];if(cc)showCountry(cc);});
-      mapPaths.append("title").text(function(f){var cc=byName[f.properties.name];
-        return cc?COUNTRIES[cc].name_tr+" — tıkla":f.properties.name;});
       euFeats.forEach(function(f){var cc=byName[f.properties.name],c=path.centroid(f);if(!isFinite(c[0]))return;
-        svg.append("text").attr("x",c[0]).attr("y",c[1]).attr("text-anchor","middle").attr("font-size",10)
-          .attr("fill",isDark?"#eef4fb":"#0c2c4c").attr("pointer-events","none")
-          .attr("stroke",isDark?"rgba(0,0,0,.35)":"rgba(255,255,255,.6)").attr("stroke-width",.4)
-          .attr("paint-order","stroke").text(cc.toUpperCase());});
+        svg.append("text").attr("x",c[0]).attr("y",c[1]).attr("text-anchor","middle")
+          .attr("font-size",10).attr("font-family","Inter,sans-serif").attr("font-weight",600)
+          .attr("fill","#dce6f2").attr("pointer-events","none")
+          .attr("stroke","rgba(10,14,19,.55)").attr("stroke-width",2).attr("paint-order","stroke")
+          .text(cc.toUpperCase());});
       paintMap();
     });
   }

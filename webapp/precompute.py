@@ -6,7 +6,7 @@ For EVERY country Energy-Charts serves it:
      the CQR conformalized quantile price model and the calibrated
      negative-price classifier,
   3. produces a next-24h forecast (generation, price band, risk, signals
-     with a short Turkish rationale),
+     with a short plain-English rationale),
   4. runs a 14-day HOLDOUT evaluation to report real skill (generation MAE,
      price-band coverage, strategy-vs-naive backtest edge + Sharpe) and a
      48-hour forecast-vs-actual REPLAY,
@@ -77,40 +77,39 @@ class Country:
     code: str
     bzn: str
     name_en: str
-    name_tr: str
     lat: float
     lon: float
 
 
 COUNTRIES = [
-    Country("de", "DE-LU", "Germany", "Almanya", 51.2, 10.4),
-    Country("at", "AT", "Austria", "Avusturya", 47.6, 14.1),
-    Country("be", "BE", "Belgium", "Belçika", 50.6, 4.7),
-    Country("bg", "BG", "Bulgaria", "Bulgaristan", 42.7, 25.5),
-    Country("ch", "CH", "Switzerland", "İsviçre", 46.8, 8.2),
-    Country("cz", "CZ", "Czechia", "Çekya", 49.8, 15.5),
-    Country("dk", "DK1", "Denmark", "Danimarka", 56.0, 10.0),
-    Country("ee", "EE", "Estonia", "Estonya", 58.7, 25.5),
-    Country("es", "ES", "Spain", "İspanya", 40.3, -3.7),
-    Country("fi", "FI", "Finland", "Finlandiya", 62.9, 26.0),
-    Country("fr", "FR", "France", "Fransa", 46.6, 2.5),
-    Country("gr", "GR", "Greece", "Yunanistan", 39.1, 22.0),
-    Country("hr", "HR", "Croatia", "Hırvatistan", 45.5, 16.0),
-    Country("hu", "HU", "Hungary", "Macaristan", 47.2, 19.4),
-    Country("it", "IT-North", "Italy", "İtalya", 45.5, 9.2),
-    Country("lt", "LT", "Lithuania", "Litvanya", 55.2, 23.9),
-    Country("lu", "DE-LU", "Luxembourg", "Lüksemburg", 49.8, 6.1),
-    Country("lv", "LV", "Latvia", "Letonya", 56.9, 24.6),
-    Country("nl", "NL", "Netherlands", "Hollanda", 52.2, 5.3),
-    Country("no", "NO2", "Norway", "Norveç", 58.9, 7.0),
-    Country("pl", "PL", "Poland", "Polonya", 52.1, 19.4),
-    Country("pt", "PT", "Portugal", "Portekiz", 39.6, -8.0),
-    Country("ro", "RO", "Romania", "Romanya", 45.9, 25.0),
-    Country("rs", "RS", "Serbia", "Sırbistan", 44.2, 20.9),
-    Country("se", "SE3", "Sweden", "İsveç", 59.3, 15.0),
-    Country("si", "SI", "Slovenia", "Slovenya", 46.1, 14.8),
-    Country("sk", "SK", "Slovakia", "Slovakya", 48.7, 19.5),
-    Country("me", "ME", "Montenegro", "Karadağ", 42.7, 19.3),
+    Country("de", "DE-LU", "Germany", 51.2, 10.4),
+    Country("at", "AT", "Austria", 47.6, 14.1),
+    Country("be", "BE", "Belgium", 50.6, 4.7),
+    Country("bg", "BG", "Bulgaria", 42.7, 25.5),
+    Country("ch", "CH", "Switzerland", 46.8, 8.2),
+    Country("cz", "CZ", "Czechia", 49.8, 15.5),
+    Country("dk", "DK1", "Denmark", 56.0, 10.0),
+    Country("ee", "EE", "Estonia", 58.7, 25.5),
+    Country("es", "ES", "Spain", 40.3, -3.7),
+    Country("fi", "FI", "Finland", 62.9, 26.0),
+    Country("fr", "FR", "France", 46.6, 2.5),
+    Country("gr", "GR", "Greece", 39.1, 22.0),
+    Country("hr", "HR", "Croatia", 45.5, 16.0),
+    Country("hu", "HU", "Hungary", 47.2, 19.4),
+    Country("it", "IT-North", "Italy", 45.5, 9.2),
+    Country("lt", "LT", "Lithuania", 55.2, 23.9),
+    Country("lu", "DE-LU", "Luxembourg", 49.8, 6.1),
+    Country("lv", "LV", "Latvia", 56.9, 24.6),
+    Country("nl", "NL", "Netherlands", 52.2, 5.3),
+    Country("no", "NO2", "Norway", 58.9, 7.0),
+    Country("pl", "PL", "Poland", 52.1, 19.4),
+    Country("pt", "PT", "Portugal", 39.6, -8.0),
+    Country("ro", "RO", "Romania", 45.9, 25.0),
+    Country("rs", "RS", "Serbia", 44.2, 20.9),
+    Country("se", "SE3", "Sweden", 59.3, 15.0),
+    Country("si", "SI", "Slovenia", 46.1, 14.8),
+    Country("sk", "SK", "Slovakia", 48.7, 19.5),
+    Country("me", "ME", "Montenegro", 42.7, 19.3),
 ]
 
 
@@ -180,7 +179,7 @@ def _run_pipeline(train_hist: pd.DataFrame, weather: pd.DataFrame,
 
 
 def _signals_for(gen: np.ndarray, p10, p50, p90, risk, hours, params) -> tuple[list, list]:
-    """Run the decision policy over a horizon; return (signals, tr_rationale)."""
+    """Run the decision policy over a horizon; return (signals, rationale)."""
     sigs, reasons, charge = [], [], 0.0
     for i, ts in enumerate(hours):
         sig = decide(generation_mwh=gen[i] * ASSET_FRACTION,
@@ -190,21 +189,21 @@ def _signals_for(gen: np.ndarray, p10, p50, p90, risk, hours, params) -> tuple[l
         charge = max(0.0, min(params.storage_capacity_mwh,
                               charge + sig.store_mwh - sig.discharge_mwh))
         sigs.append(sig.kind.value)
-        reasons.append(_tr_reason(sig.kind.value, float(p50[i]), float(risk[i])))
+        reasons.append(_reason(sig.kind.value, float(p50[i]), float(risk[i])))
     return sigs, reasons
 
 
-def _tr_reason(kind: str, p50: float, risk: float) -> str:
+def _reason(kind: str, p50: float, risk: float) -> str:
     e = round(p50)
     if kind == "SELL":
-        return f"Beklenen fiyat {e} €/MWh; satmak en kârlı seçenek."
+        return f"Expected price {e} EUR/MWh — selling is the most profitable action."
     if kind == "STORE":
-        return f"Fiyat düşük ({e} €/MWh); ileride daha pahalıya satmak için depola."
+        return f"Price is low ({e} EUR/MWh) — store now, sell later at a higher price."
     if kind == "DISCHARGE":
-        return f"Yüksek fiyat ({e} €/MWh); bataryadan satış zamanı."
+        return f"High price ({e} EUR/MWh) — time to sell from the battery."
     if kind == "CURTAIL":
-        return f"Fiyat negatif bölgede ({e} €/MWh, risk %{round(risk*100)}); üretimi durdur."
-    return "Üretim yok; işlem yapılmadı."
+        return f"Price in negative territory ({e} EUR/MWh, risk {round(risk*100)}%) — curtail production."
+    return "No generation — no action."
 
 
 def _holdout(hist: pd.DataFrame, weather: pd.DataFrame) -> dict | None:
@@ -314,7 +313,7 @@ def process_country(c: Country) -> dict | None:
     recent = hist.iloc[-48:]
     renew_share = float((hist["generation_mw"] / hist["demand_mw"]).clip(0, 3).mean()) * 100.0
     payload = {
-        "code": c.code, "bzn": c.bzn, "name_en": c.name_en, "name_tr": c.name_tr,
+        "code": c.code, "bzn": c.bzn, "name_en": c.name_en,
         "updated_utc": now.isoformat(),
         "kpis": {
             "last_price_eur_mwh": round(float(hist["price_eur_mwh"].iloc[-1]), 1),
@@ -361,7 +360,7 @@ def main(only: list[str] | None = None) -> None:
 
         (SITE_DATA / f"{c.code}.json").write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        idx = {"code": c.code, "name_en": c.name_en, "name_tr": c.name_tr, "kpis": payload["kpis"]}
+        idx = {"code": c.code, "name_en": c.name_en, "kpis": payload["kpis"]}
         if "metrics" in payload:
             idx["metrics"] = payload["metrics"]
         index.append(idx)
