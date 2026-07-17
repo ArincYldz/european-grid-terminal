@@ -46,6 +46,11 @@ from src.features import build_generation_feature_matrix
 from src.features.price_features import build_price_feature_matrix
 from src.ingestion import fetch_weather_window
 from src.ingestion.energy_charts import fetch_power, fetch_price
+from src.ingestion.energy_extras import (
+    fetch_carbon_intensity,
+    fetch_cross_border_flows,
+    fetch_installed_power,
+)
 from src.models import GenerationForecaster, NegativePriceClassifier
 from src.models.conformal import ConformalizedQuantileForecaster
 
@@ -53,6 +58,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 log = logging.getLogger("precompute")
 
 SITE_DATA = Path(__file__).parent / "site" / "data"
+EV_CACHE = SITE_DATA / "ev_stations.json"
 HISTORY_DAYS = 88
 FORECAST_HOURS = 24
 HOLDOUT_HOURS = 14 * 24        # 14 days held out for the skill metrics
@@ -111,6 +117,30 @@ COUNTRIES = [
     Country("sk", "SK", "Slovakia", 48.7, 19.5),
     Country("me", "ME", "Montenegro", 42.7, 19.3),
 ]
+
+
+# Cross-border partners as Energy-Charts names them (enumerated from the live
+# feed rather than guessed), mapped to codes. Partners outside the dashboard
+# still get drawn on the flow map, so they need coordinates too.
+NAME2CODE = {
+    "Austria": "at", "Belgium": "be", "Bulgaria": "bg", "Croatia": "hr",
+    "Czech Republic": "cz", "Denmark": "dk", "Estonia": "ee", "Finland": "fi",
+    "France": "fr", "Germany": "de", "Greece": "gr", "Hungary": "hu",
+    "Italy": "it", "Latvia": "lv", "Lithuania": "lt", "Luxembourg": "lu",
+    "Montenegro": "me", "Netherlands": "nl", "Norway": "no", "Poland": "pl",
+    "Portugal": "pt", "Romania": "ro", "Serbia": "rs", "Slovakia": "sk",
+    "Slovenia": "si", "Spain": "es", "Sweden": "se", "Switzerland": "ch",
+    # Partners we do not forecast, but that the grid physically connects to.
+    "Albania": "al", "Bosnia-Herzegovina": "ba", "Kosovo": "xk", "Malta": "mt",
+    "Moldova": "md", "North Macedonia": "mk", "Turkey": "tr", "Ukraine": "ua",
+    "United Kingdom": "gb",
+}
+
+EXTRA_COORDS = {
+    "al": (41.1, 20.1), "ba": (44.0, 17.9), "xk": (42.6, 20.9), "mt": (35.9, 14.4),
+    "md": (47.0, 28.8), "mk": (41.6, 21.7), "tr": (39.9, 32.9), "ua": (49.5, 31.5),
+    "gb": (53.5, -1.8),
+}
 
 
 def _train_target_model(weather_hist: pd.DataFrame, target: pd.Series) -> GenerationForecaster | None:
@@ -206,6 +236,109 @@ def _reason(kind: str, p50: float, risk: float) -> str:
     return "No generation — no action."
 
 
+def _capture_rates(hist: pd.DataFrame) -> dict:
+    """Capture rate for wind and solar: the price they actually earn.
+
+    A renewable asset does NOT earn the average market price. It generates when
+    every other asset of its kind generates, and that surplus pushes the price
+    down at exactly those hours — "cannibalisation". The capture rate is
+
+        mean(price * generation) / (mean(price) * mean(generation))
+
+    i.e. the generation-weighted price over the plain average. It is typically
+    0.7-0.95 for solar in sunny markets. Without this, a revenue estimate built
+    on the average price is systematically too optimistic, so the calculators
+    apply it.
+    """
+    out = {}
+    price = hist["price_eur_mwh"].to_numpy()
+    mean_price = float(np.mean(price))
+    for tech, col in (("solar", "solar_mw"), ("wind", "wind_mw")):
+        gen = hist[col].to_numpy()
+        mean_gen = float(np.mean(gen))
+        if mean_gen <= 0 or mean_price == 0:
+            continue
+        weighted = float(np.mean(price * gen)) / mean_gen
+        out[f"{tech}_capture_pct"] = round(weighted / mean_price * 100.0, 1)
+        out[f"{tech}_captured_eur_mwh"] = round(weighted, 1)
+    out["mean_price_eur_mwh"] = round(mean_price, 1)
+    return out
+
+
+def _load_ev_cache() -> dict:
+    """EV charger counts built weekly by build_ev_cache.py (Overpass is too slow
+    to call from this nightly job). Absent file is fine — the panel just hides."""
+    if not EV_CACHE.exists():
+        return {}
+    try:
+        return json.loads(EV_CACHE.read_text(encoding="utf-8")).get("countries", {})
+    except (ValueError, OSError) as exc:
+        log.warning("EV cache unreadable (%s) — continuing without it", exc)
+        return {}
+
+
+def _carbon_block(c: Country, hist: pd.DataFrame, weather: pd.DataFrame,
+                  future: pd.DatetimeIndex, start: str, end: str) -> dict | None:
+    """Grid carbon intensity: recent history + our OWN 24h forecast.
+
+    Energy-Charts exposes a co2eq_forecast field but it comes back empty for the
+    countries we serve, so we forecast it ourselves with the same weather-driven
+    model class used for wind/solar/demand. That is physically sound: carbon
+    intensity is mostly a function of how much wind and sun displace fossil
+    plants, and weather is exactly what predicts that.
+    """
+    try:
+        carbon = fetch_carbon_intensity(c.code, start, end)
+    except Exception as exc:  # noqa: BLE001
+        log.info("  %s: no carbon data (%s)", c.code, str(exc)[:80])
+        return None
+
+    merged = hist.merge(carbon, on="target_time", how="left")
+    obs = merged["co2eq_g_kwh"]
+    if obs.notna().sum() < 400:
+        log.info("  %s: carbon series too short (%d rows)", c.code, int(obs.notna().sum()))
+        return None
+
+    train = merged.dropna(subset=["co2eq_g_kwh"]).reset_index(drop=True)
+    model = _train_target_model(train, train["co2eq_g_kwh"])
+    fc = _predict(model, weather, future) if model is not None else np.zeros(len(future))
+    if model is None or np.all(fc == 0):
+        # Fall back to the average daily shape rather than showing nothing.
+        prof = train.set_index("target_time")["co2eq_g_kwh"]
+        fc = prof.groupby(prof.index.hour).mean().reindex(future.hour).to_numpy()
+
+    recent = merged.iloc[-48:]
+    cleanest = int(np.argmin(fc))
+    return {
+        "now_g_kwh": round(float(obs.dropna().iloc[-1]), 0),
+        "forecast_g_kwh": [round(float(v), 0) for v in fc],
+        "recent_hours": [t.isoformat() for t in recent["target_time"]],
+        "recent_g_kwh": [None if pd.isna(v) else round(float(v), 0)
+                         for v in recent["co2eq_g_kwh"]],
+        "cleanest_hour_utc": future[cleanest].isoformat(),
+        "cleanest_g_kwh": round(float(fc[cleanest]), 0),
+    }
+
+
+def _flows_block(c: Country, start: str, end: str) -> list[dict] | None:
+    """Net cross-border physical flows with neighbours (GW, + = import)."""
+    try:
+        return fetch_cross_border_flows(c.code, start, end) or None
+    except Exception as exc:  # noqa: BLE001
+        log.info("  %s: no cross-border data (%s)", c.code, str(exc)[:80])
+        return None
+
+
+def _capacity_block(c: Country) -> dict | None:
+    """Installed capacity by type and year (GW), including planned build-out."""
+    try:
+        cap = fetch_installed_power(c.code)
+    except Exception as exc:  # noqa: BLE001
+        log.info("  %s: no installed-capacity data (%s)", c.code, str(exc)[:80])
+        return None
+    return cap if cap.get("types") else None
+
+
 def _holdout(hist: pd.DataFrame, weather: pd.DataFrame) -> dict | None:
     """14-day out-of-sample skill metrics + a 48h forecast-vs-actual replay."""
     if len(hist) < HOLDOUT_HOURS + 600:
@@ -263,7 +396,7 @@ def _holdout(hist: pd.DataFrame, weather: pd.DataFrame) -> dict | None:
     }
 
 
-def process_country(c: Country) -> dict | None:
+def process_country(c: Country, ev_cache: dict | None = None) -> dict | None:
     now = pd.Timestamp.now("UTC").floor("h")
     start = (now - pd.Timedelta(days=HISTORY_DAYS)).strftime("%Y-%m-%d")
     end = (now + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
@@ -309,12 +442,21 @@ def process_country(c: Country) -> dict | None:
     # ---- Holdout skill metrics + replay (#1, #3) ----
     hold = _holdout(hist, weather)
 
+    # ---- Extra layers. Each is optional: a country still publishes without them. ----
+    carbon = _carbon_block(c, hist, weather, future, start, end)
+    flows = _flows_block(c, start, end)
+    capacity = _capacity_block(c)
+    ev = (ev_cache or {}).get(c.code)
+    capture = _capture_rates(hist)
+
     r1 = lambda a: [round(float(v), 1) for v in a]
     recent = hist.iloc[-48:]
     renew_share = float((hist["generation_mw"] / hist["demand_mw"]).clip(0, 3).mean()) * 100.0
     payload = {
         "code": c.code, "bzn": c.bzn, "name_en": c.name_en,
+        "lat": c.lat, "lon": c.lon,
         "updated_utc": now.isoformat(),
+        "capture": capture,
         "kpis": {
             "last_price_eur_mwh": round(float(hist["price_eur_mwh"].iloc[-1]), 1),
             "gen_forecast_gw": round(float(np.mean(fc["gen"])) / 1000.0, 2),
@@ -339,19 +481,78 @@ def process_country(c: Country) -> dict | None:
     if hold:
         payload["metrics"] = hold["metrics"]
         payload["replay"] = hold["replay"]
+    if carbon:
+        payload["carbon"] = carbon
+        payload["kpis"]["carbon_now_g_kwh"] = carbon["now_g_kwh"]
+    if flows:
+        payload["flows"] = flows
+        net = sum(f["net_gw"] for f in flows)
+        payload["kpis"]["net_import_gw"] = round(net, 2)
+    if capacity:
+        payload["capacity"] = capacity
+    if ev:
+        payload["ev"] = ev
+        payload["kpis"]["ev_chargers"] = ev["total"]
     return payload
+
+
+def _build_flow_network(payloads: list[dict]) -> dict:
+    """Reconcile per-country flows into ONE deduplicated Europe-wide network.
+
+    Every interconnector is reported twice — Germany calls the French link
+    "+1.97 import", France calls the same link "-1.97 export". Left alone that
+    would draw each arrow twice, so we normalise each flow to a directed
+    exporter -> importer edge, key it by the unordered country pair, and keep
+    the larger magnitude when the two sides disagree slightly (they report from
+    different meters, so small mismatches are normal).
+
+    Doing this here rather than in the browser means the frontend loads one
+    small file instead of 28, and the arrows cannot come out reversed.
+    """
+    coords = {c.code: (c.lat, c.lon) for c in COUNTRIES} | EXTRA_COORDS
+    edges: dict[frozenset, dict] = {}
+    unknown: set[str] = set()
+
+    for p in payloads:
+        a = p["code"]
+        for f in p.get("flows", []):
+            b = NAME2CODE.get(f["name"])
+            if b is None:
+                unknown.add(f["name"])
+                continue
+            if b not in coords or a not in coords or a == b:
+                continue
+            gw = f["net_gw"]
+            # Normalise to exporter -> importer.
+            src, dst, mag = (b, a, gw) if gw > 0 else (a, b, -gw)
+            if mag < 0.05:      # below ~50 MW the arrow is visual noise
+                continue
+            key = frozenset((a, b))
+            if key not in edges or mag > edges[key]["gw"]:
+                edges[key] = {"src": src, "dst": dst, "gw": round(mag, 2)}
+
+    if unknown:
+        log.info("Flow partners without a mapping (skipped): %s", ", ".join(sorted(unknown)))
+
+    used = {c for e in edges.values() for c in (e["src"], e["dst"])}
+    return {
+        "note": "Mean net physical flow, exporter -> importer, GW. Source: Energy-Charts.",
+        "coords": {c: {"lat": coords[c][0], "lon": coords[c][1]} for c in sorted(used)},
+        "edges": sorted(edges.values(), key=lambda e: -e["gw"]),
+    }
 
 
 def main(only: list[str] | None = None) -> None:
     SITE_DATA.mkdir(parents=True, exist_ok=True)
     targets = [c for c in COUNTRIES if not only or c.code in only]
-    index, failed = [], []
+    index, failed, payloads = [], [], []
+    ev_cache = _load_ev_cache()
 
     for c in targets:
         t0 = time.time()
         log.info("=== %s (%s) ===", c.name_en, c.code)
         try:
-            payload = process_country(c)
+            payload = process_country(c, ev_cache)
         except Exception as exc:  # noqa: BLE001
             log.warning("  %s FAILED: %s", c.code, str(exc)[:200])
             failed.append(c.code); time.sleep(PAUSE_BETWEEN_COUNTRIES_S); continue
@@ -360,6 +561,7 @@ def main(only: list[str] | None = None) -> None:
 
         (SITE_DATA / f"{c.code}.json").write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        payloads.append(payload)
         idx = {"code": c.code, "name_en": c.name_en, "kpis": payload["kpis"]}
         if "metrics" in payload:
             idx["metrics"] = payload["metrics"]
@@ -376,6 +578,18 @@ def main(only: list[str] | None = None) -> None:
     (SITE_DATA / "countries.json").write_text(
         json.dumps({"updated_utc": pd.Timestamp.now("UTC").isoformat(),
                     "countries": index}, ensure_ascii=False), encoding="utf-8")
+
+    # The flow map is Europe-wide, so a subset run would silently replace the
+    # full network with a partial one. Only rewrite it on a complete run.
+    if only:
+        log.info("Subset run — leaving flows.json untouched.")
+    elif payloads:
+        net = _build_flow_network(payloads)
+        (SITE_DATA / "flows.json").write_text(json.dumps(net, ensure_ascii=False),
+                                              encoding="utf-8")
+        log.info("Flow network: %d interconnectors across %d countries",
+                 len(net["edges"]), len(net["coords"]))
+
     log.info("DONE: %d written, %d skipped (%s)", len(index), len(failed), ",".join(failed) or "-")
 
 

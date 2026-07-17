@@ -75,29 +75,53 @@ key, the same pipeline runs on real data. Start TimescaleDB (`docker compose up
 
 ## Web dashboard (ENTSO-E-style map)
 
-`webapp/` turns the engine into a public dashboard: a Europe map; click a
-country to see its generation forecast, price uncertainty band, negative-price
-risk and hourly trading signals.
+`webapp/` turns the engine into a public dashboard: a fullscreen Europe map with
+flags; click a country to zoom into it and open its forecasts, carbon, flows and
+asset calculators alongside.
 
 - `webapp/precompute.py` — runs the engine for EVERY country Energy-Charts
-  serves (dynamic discovery, failures skipped) and writes static JSON to
-  `webapp/site/data/`. Per country: real gen/load/price + weather window,
-  three LightGBM models (wind / solar / DEMAND), CQR price quantiles,
-  calibrated negative-price risk, hourly signals with Turkish rationale,
-  plus a 14-day HOLDOUT evaluation (generation MAE%, price-band coverage%,
-  strategy-vs-naive backtest edge% and Sharpe) and a 48h forecast-vs-actual
-  replay.
-- `webapp/site/` — fully static frontend (D3 choropleth map colored by a
-  selectable live metric, model-credibility panel, forecast-vs-actual replay
-  charts, signal tooltips), no build step. Deployable anywhere static files
-  are served.
+  serves (failures skipped) and writes static JSON to `webapp/site/data/`.
+  Per country: real gen/load/price + weather window, three LightGBM models
+  (wind / solar / DEMAND), CQR price quantiles, calibrated negative-price risk,
+  hourly signals with a plain-English rationale, a 14-day HOLDOUT evaluation
+  (generation MAE%, price-band coverage%, strategy-vs-naive edge% and Sharpe)
+  and a 48h forecast-vs-actual replay. It also emits `flows.json`, one
+  reconciled Europe-wide interconnector network.
+- `webapp/build_solar_grid.py` — one-off. PVGIS yield lattice over Europe.
+- `webapp/build_ev_cache.py` — weekly. EV charger counts from OpenStreetMap.
+- `webapp/site/` — fully static frontend, no build step.
 
 Local run:
 ```bash
-python webapp/precompute.py          # all countries (~10-20 min, rate-limited API)
+python webapp/build_solar_grid.py    # once, ~20 min (climatology never changes)
+python webapp/build_ev_cache.py      # weekly, ~25 min (Overpass is slow)
+python webapp/precompute.py          # daily, ~10-20 min (rate-limited API)
 python -m http.server 8942 --directory webapp/site
 # open http://localhost:8942
 ```
+
+### Data sources — all keyless, all verified live
+| Source | Gives us | Notes |
+|---|---|---|
+| Energy-Charts (Fraunhofer ISE) | generation mix, day-ahead price, **carbon intensity**, **cross-border flows**, **installed capacity 2002–2030** | no key; CORS restricted, so server-side only |
+| Open-Meteo | wind @100m, irradiance, temperature — forecast + archive | no key; **sends CORS**, so the wind calculator calls it live from the browser |
+| PVGIS 5.2 (EU JRC) | solar yield climatology (SARAH2 satellite) | no key, no CORS → baked into a lattice once; it never changes |
+| OpenStreetMap / Overpass | public EV charging points | ODbL; ~35 s/country and rate-limited → cached weekly, stale values kept on failure |
+
+Rejected during the survey (they now gate access behind a key): OpenChargeMap
+(403), Ember (403), Electricity Maps (401, and its free tier covers one zone).
+
+### Two economics details the dashboard gets right
+- **Capture rate.** A solar farm does not earn the average price — it generates
+  when every other panel does, and that glut craters the midday price. We
+  measure `mean(price × generation) / (mean(price) × mean(generation))` per
+  country. German solar captured **~46%** over the last 88 days, so a revenue
+  estimate built on the average price would be roughly double the truth.
+- **Carbon forecast.** The feed publishes carbon history but its forecast field
+  comes back empty, so we forecast it with the same weather-driven model class
+  used for wind and solar. Carbon intensity is mostly a function of how much
+  wind and sun displace fossil plants — the model independently learns that the
+  cleanest hour is midday.
 
 ### Deploy (Vercel)
 1. Push this repo to GitHub.

@@ -19,6 +19,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      # Self-throttling: the builder re-fetches a country only when its cached
+      # count is over a week old, so running it daily costs almost nothing and
+      # a failed Overpass sweep just keeps the previous numbers.
+      - name: Refresh EV charger counts
+        run: python webapp/build_ev_cache.py
+        continue-on-error: true
       - run: python webapp/precompute.py
       - name: Commit refreshed data
         run: |
