@@ -111,7 +111,7 @@ python -m http.server 8942 --directory webapp/site
 Rejected during the survey (they now gate access behind a key): OpenChargeMap
 (403), Ember (403), Electricity Maps (401, and its free tier covers one zone).
 
-### Two economics details the dashboard gets right
+### Three details the dashboard gets right
 - **Capture rate.** A solar farm does not earn the average price — it generates
   when every other panel does, and that glut craters the midday price. We
   measure `mean(price × generation) / (mean(price) × mean(generation))` per
@@ -122,6 +122,22 @@ Rejected during the survey (they now gate access behind a key): OpenChargeMap
   used for wind and solar. Carbon intensity is mostly a function of how much
   wind and sun displace fossil plants — the model independently learns that the
   cleanest hour is midday.
+- **No count choropleths.** Every metric the map can shade by is intensive — a
+  rate or a density. Shading by an absolute total would just rank countries by
+  size, so charger counts are divided by the country's own area, measured off
+  the drawn geometry. Only the polygons inside the map frame count: world-atlas
+  ships whole sovereign states, and charging France for French Guiana inflates
+  its area 17% (measured) and understates its density by the same margin.
+
+### Known limits
+- The upstream feed publishes a few hours behind real time, so the "Now" panel
+  stamps each value with the hour it belongs to, and the EV tool prices against
+  the next hour that has not started yet rather than the first forecast row.
+- Solar yield is interpolated from a 2° lattice: ~10% error in mountains
+  (Munich reads 1000 vs 1113 kWh/kWp direct from PVGIS) and on narrow coasts.
+- Clock times render in the viewer's timezone, not the country's.
+- Overpass 504s on a few countries per sweep; those keep their previous count
+  and are retried next run.
 
 ### Deploy (Vercel)
 1. Push this repo to GitHub.

@@ -363,6 +363,10 @@ function num(x,d){return (x==null||!isFinite(x))?"—":
   Number(x).toLocaleString("en-GB",{minimumFractionDigits:d||0,maximumFractionDigits:d||0});}
 
 /* ================= map colouring ================= */
+/* Every metric here is INTENSIVE — a rate or a density, never a raw count.
+   Shading a country by an absolute total is a cartographic own-goal: Germany
+   would lead the EV map purely for being large. So charger counts are divided
+   by the country's own area, measured off the geometry we already have. */
 var METRICS={
   none:{label:"None"},
   last_price_eur_mwh:{label:"Price",unit:"€/MWh",
@@ -371,11 +375,43 @@ var METRICS={
     ramp:["#E8EEE9","#BFD3C4","#94B39F","#68907A","#3E6E56"]},
   renewable_share_pct:{label:"Renewables",unit:"% of demand",
     ramp:["#E9EDF2","#C3D3E4","#9BB8D5","#6F9BC5","#3D7EC4"]},
-  ev_chargers:{label:"EV chargers",unit:"public charging points",
-    ramp:["#EFEAF2","#D6C7E0","#BAA2CC","#9B7BB6","#7A4E9B"]}
+  ev_density:{label:"EV chargers",unit:"charging points per 1000 km²",
+    ramp:["#EFEAF2","#D6C7E0","#BAA2CC","#9B7BB6","#7A4E9B"],
+    derive:function(c){
+      var n=COUNTRIES[c]&&COUNTRIES[c].kpis.ev_chargers;
+      var a=areaKm2(c);
+      return (n==null||!a)?null:n/(a/1000);
+    }}
 };
-function metricVals(m){var o=[];for(var c in COUNTRIES){var v=COUNTRIES[c].kpis[m];
-  if(v!=null&&isFinite(v))o.push(v);}return o;}
+var _area={},FRAME={lon:[-11,34],lat:[34,71]};
+/* Area of the country INSIDE the mapped frame. world-atlas hands back whole
+   sovereign states, so plain geoArea charges France for French Guiana (+17%,
+   measured) and would understate its charger density by the same margin.
+   Counting only the polygons we actually draw keeps the shading consistent
+   with the map. */
+function areaKm2(code){
+  if(_area[code]!==undefined)return _area[code];
+  var f=featById[code];
+  if(!f){_area[code]=null;return null;}
+  var polys=f.geometry.type==="MultiPolygon"
+    ? f.geometry.coordinates.map(function(c){return {type:"Polygon",coordinates:c};})
+    : [f.geometry];
+  var total=0;
+  polys.forEach(function(p){
+    var c=d3.geoCentroid(p);
+    if(c[0]>=FRAME.lon[0]&&c[0]<=FRAME.lon[1]&&c[1]>=FRAME.lat[0]&&c[1]<=FRAME.lat[1])
+      total+=d3.geoArea(p)*6371*6371;
+  });
+  _area[code]=total||null;
+  return _area[code];
+}
+function metricVal(c,m){
+  var M=METRICS[m];
+  var v=M.derive?M.derive(c):(COUNTRIES[c]&&COUNTRIES[c].kpis[m]);
+  return (v==null||!isFinite(v))?null:v;
+}
+function metricVals(m){var o=[];for(var c in COUNTRIES){var v=metricVal(c,m);
+  if(v!=null)o.push(v);}return o;}
 function paint(){
   var sel=d3.select("#lands").selectAll("path.data");
   var lg=document.getElementById("legend");
@@ -385,12 +421,13 @@ function paint(){
     '<div class="row">No data for this metric yet.</div>';return;}
   var sc=d3.scaleQuantile().domain(vals).range(METRICS[metric].ramp);
   sel.style("fill",function(){
-    var c=this.getAttribute("data-code"),v=COUNTRIES[c]&&COUNTRIES[c].kpis[metric];
-    return (v==null||!isFinite(v))?null:sc(v);});
+    var v=metricVal(this.getAttribute("data-code"),metric);
+    return v==null?null:sc(v);});
   var ex=d3.extent(vals),bounds=[ex[0]].concat(sc.quantiles(),[ex[1]]);
+  var dp=ex[1]<10?1:0;   // densities are small numbers; prices are not
   lg.innerHTML=METRICS[metric].ramp.map(function(col,i){
     return '<div class="row"><span class="sw" style="background:'+col+'"></span>'+
-      num(bounds[i],0)+" – "+num(bounds[i+1],0)+"</div>";}).join("")+
+      num(bounds[i],dp)+" – "+num(bounds[i+1],dp)+"</div>";}).join("")+
     '<div class="row" style="margin-top:6px">'+METRICS[metric].unit+'</div>';
 }
 
