@@ -228,8 +228,8 @@ a:hover{text-decoration:underline}
 .hint{font-size:11.5px;color:var(--ink-3);padding-bottom:7px}
 .hint b{color:var(--accent-2);font-family:var(--mono);font-weight:500}
 
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:11px}
-.stat{background:var(--card-2);border-radius:var(--r-sm);padding:11px 12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:0 26px}
+.stat{border-top:1px solid var(--line);padding:10px 0 8px}
 .stat .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3)}
 .stat .v{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:3px;line-height:1.1}
 .stat .d{font-size:10.5px;color:var(--ink-3);margin-top:3px;line-height:1.35}
@@ -346,6 +346,47 @@ a:hover{text-decoration:underline}
   color:var(--ink-3);font-size:13px;transition:opacity .3s}
 #boot.gone{opacity:0;pointer-events:none}
 
+/* ---- verdict: the always-visible answer ---- */
+#verdict{padding:2px 0 16px;border-bottom:1px solid var(--line)}
+.v-meta{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+#verdict .headline{font-size:24px;line-height:1.25;margin-bottom:13px}
+.v-line{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.v-score{font-size:30px;font-weight:600;line-height:1}
+.v-conf{font-size:11.5px;color:var(--ink-3)}
+.v-conf b{font-size:14px;color:var(--ink)}
+#ins-rationale{font-size:11.5px;color:var(--ink-3);flex-basis:100%}
+#verdict .bar{margin-top:10px}
+
+/* ---- hero price ---- */
+#hero-price{padding:16px 0 10px;border-bottom:1px solid var(--line)}
+.sec-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.eyebrow{font-family:var(--display);font-size:11.5px;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+.linkbtn{font-size:12px;color:var(--info);padding:3px 0;white-space:nowrap}
+.linkbtn:hover{color:var(--accent-2)}
+
+/* ---- accordion rows: the closed state already answers ---- */
+.acc{border-bottom:1px solid var(--line)}
+.acc-head{width:100%;display:flex;align-items:baseline;gap:12px;padding:16px 2px;text-align:left}
+.acc-t{font-family:var(--display);font-size:12.5px;font-weight:600;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-2);white-space:nowrap;transition:color .15s}
+.acc-head:hover .acc-t{color:var(--ink)}
+.acc-sum{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-3);
+  text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.chev{color:var(--ink-3);font-size:14px;flex:none;transition:transform .3s var(--ease)}
+.acc.open .chev{transform:rotate(90deg)}
+.acc-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .42s var(--ease)}
+.acc.open .acc-body{grid-template-rows:1fr}
+.acc-inner{overflow:hidden;min-width:0}
+.acc-pad{padding:4px 0 24px}
+.mini-t{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);margin:18px 0 8px}
+
+/* ---- flattened KPI strip: type and hairlines, no boxes ---- */
+#kpis{display:grid;grid-template-columns:repeat(4,1fr)}
+#kpis .kpi{min-height:0;padding:2px 14px 6px 0}
+#kpis .kpi+.kpi{border-left:1px solid var(--line);padding-left:14px}
+
 /* ============================ responsive ============================ */
 @media (max-width:1200px){
   .c8,.c7{grid-column:span 12}.c4,.c5{grid-column:span 12}
@@ -370,6 +411,8 @@ a:hover{text-decoration:underline}
   .date,.ctrl.hide-sm{display:none}
   #cpick-btn{min-width:130px}
   .kpi .val{font-size:25px}
+  #kpis{grid-template-columns:1fr 1fr}
+  #kpis .kpi{border-left:none;padding-left:0}
   .shap-row{grid-template-columns:1fr 96px 64px;gap:7px;font-size:11.5px}
 }
 @media (prefers-reduced-motion:reduce){
@@ -433,77 +476,64 @@ a:hover{text-decoration:underline}
 <div id="panel-in">
   <button id="back">‹ Back to map</button>
 
-  <!-- ===== HERO KPIs ===== -->
-  <section class="grid" id="kpis" aria-label="Key indicators"></section>
-
-  <!-- ===== FORECAST + INSIGHT ===== -->
-  <section class="grid stack">
-    <div class="card c8">
-      <div class="card-h">
-        <h3>Price forecast — next 24 h</h3><span class="sp"></span>
-        <span class="sub" id="price-sub"></span>
-        <button class="ctrl" id="btn-explain" style="height:29px;padding:0 10px;font-size:12px">
-          ⓘ Explain prediction</button>
-      </div>
-      <div class="legend">
-        <span><i style="background:var(--accent)"></i>Expected (P50)</span>
-        <span><i style="background:var(--accent-dim)"></i>80% confidence band</span>
-        <span><i style="background:var(--neg)"></i>Negative-price line</span>
-      </div>
-      <svg id="c-price" class="chart" viewBox="0 0 900 300"></svg>
+  <!-- ===== VERDICT — the answer, always visible ===== -->
+  <header id="verdict">
+    <div class="v-meta">
+      <span class="tag mute" id="ins-ver"></span>
+      <span style="font-size:11.5px;color:var(--ink-3)" id="price-sub"></span>
     </div>
-
-    <div class="card c4">
-      <div class="card-h"><h3>Market insight</h3><span class="sp"></span>
-        <span class="tag mute" id="ins-ver"></span></div>
-      <div class="headline" id="ins-headline">—</div>
-
-      <div class="gauge">
-        <div>
-          <div class="num big" id="ins-score">—</div>
-          <div style="font-size:10.5px;color:var(--ink-3);text-transform:uppercase;
-                      letter-spacing:.08em">Market score</div>
-        </div>
-        <div class="meta">
-          <div class="rec h" id="ins-rec">—</div>
-          <div class="bar"><i id="ins-bar" style="width:0"></i></div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:6px" id="ins-rationale"></div>
-        </div>
-      </div>
-
-      <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
-        <div style="flex:1">
-          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
-                      color:var(--ink-3)">Forecast confidence</div>
-          <div class="bar"><i id="conf-bar" style="width:0;background:var(--info)"></i></div>
-        </div>
-        <div class="num" id="conf-val" style="font-size:17px;font-weight:600">—</div>
-      </div>
-
-      <div class="card-h" style="margin:16px 0 9px"><h3>Key drivers</h3></div>
-      <div class="drv" id="ins-drivers"></div>
-      <div class="disclosure" id="ins-note"></div>
+    <div class="headline" id="ins-headline">—</div>
+    <div class="v-line">
+      <span class="v-score num" id="ins-score">—</span>
+      <span class="rec h" id="ins-rec">—</span>
+      <span class="v-conf">confidence <b class="num" id="conf-val">—</b></span>
+      <span id="ins-rationale"></span>
     </div>
-  </section>
+    <div class="bar"><i id="ins-bar" style="width:0"></i></div>
+    <div hidden aria-hidden="true"><i id="conf-bar"></i></div>
+    <div class="disclosure" id="ins-note" style="margin-top:12px"></div>
+  </header>
 
-  <!-- ===== RENEWABLES + CARBON ===== -->
-  <section class="grid stack">
-    <div class="card c6">
-      <div class="card-h"><h3>Renewable generation</h3><span class="sp"></span>
-        <span class="sub">forecast, next 24 h</span></div>
+  <!-- ===== PRICE — the one chart that is always open ===== -->
+  <div id="hero-price">
+    <div class="sec-row">
+      <span class="eyebrow">Price — next 24 h</span>
+      <span class="legend" style="margin:0 0 0 auto">
+        <span><i style="background:var(--accent)"></i>P50</span>
+        <span><i style="background:var(--accent-dim)"></i>80% band</span>
+      </span>
+      <button class="linkbtn" id="btn-explain" style="margin-left:14px">Explain prediction</button>
+    </div>
+    <svg id="c-price" class="chart" viewBox="0 0 900 300"></svg>
+  </div>
+
+  <!-- ===== CLOSED ROWS — each summary line already answers ===== -->
+  <div class="acc" id="acc-now">
+    <button class="acc-head" aria-expanded="false"><span class="acc-t">Now</span>
+      <span class="acc-sum" id="sum-now"></span><span class="chev">›</span></button>
+    <div class="acc-body"><div class="acc-inner"><div class="acc-pad">
+      <div id="kpis" aria-label="Key indicators"></div>
+      <div class="mini-t">Cross-border flows</div>
+      <div id="flows-list"></div>
+    </div></div></div>
+  </div>
+
+  <div class="acc" id="acc-gen">
+    <button class="acc-head" aria-expanded="false"><span class="acc-t">Generation &amp; carbon</span>
+      <span class="acc-sum" id="sum-gen"></span><span class="chev">›</span></button>
+    <div class="acc-body"><div class="acc-inner"><div class="acc-pad">
       <div class="legend">
         <span><i style="background:var(--wind)"></i>Wind</span>
         <span><i style="background:var(--solar)"></i>Solar</span>
         <span id="lg-demand"><i style="background:var(--ink-3)"></i>Demand (right axis)</span>
       </div>
       <svg id="c-gen" class="chart" viewBox="0 0 640 260"></svg>
-    </div>
-
-    <div class="card c6">
-      <div class="card-h"><h3>Carbon intensity</h3><span class="sp"></span>
-        <span class="sub" id="carbon-sub"></span></div>
+      <div class="sec-row" style="margin-top:18px">
+        <span class="eyebrow">Carbon intensity</span>
+        <span style="font-size:11px;color:var(--ink-3)" id="carbon-sub"></span>
+      </div>
       <svg id="c-carbon" class="chart" viewBox="0 0 640 190"></svg>
-      <div class="stats" style="margin-top:14px">
+      <div class="stats" style="margin-top:12px">
         <div class="stat"><div class="k">Cleanest hour</div>
           <div class="v" id="cln-h">—</div><div class="d" id="cln-v"></div></div>
         <div class="stat"><div class="k">Band coverage</div>
@@ -511,122 +541,116 @@ a:hover{text-decoration:underline}
         <div class="stat"><div class="k">Risk level</div>
           <div class="v" id="risk-v">—</div><div class="d" id="risk-d"></div></div>
       </div>
-    </div>
-  </section>
+    </div></div></div>
+  </div>
 
-  <!-- ===== HEATMAP ===== -->
-  <section class="card stack">
-    <div class="card-h"><h3>Market signals — hour by hour</h3><span class="sp"></span>
-      <span class="sub">hover any cell for detail</span></div>
-    <div class="hm" id="heatmap"></div>
-    <div class="disclosure" id="hm-note">
-      Colour runs from low (dark) to high (bright) within each row's own range, so rows in
-      different units stay comparable. The signal row uses the decision engine's own colours.
-    </div>
-  </section>
+  <div class="acc" id="acc-sig">
+    <button class="acc-head" aria-expanded="false"><span class="acc-t">Hourly signals</span>
+      <span class="acc-sum" id="sum-sig"></span><span class="chev">›</span></button>
+    <div class="acc-body"><div class="acc-inner"><div class="acc-pad">
+      <div class="hm" id="heatmap"></div>
+      <div class="disclosure" id="hm-note">
+        Colour runs from low (dark) to high (bright) within each row's own range, so rows in
+        different units stay comparable. The signal row uses the decision engine's own colours.
+      </div>
+    </div></div></div>
+  </div>
 
-  <!-- ===== DRIVERS + FLOWS ===== -->
-  <section class="grid stack">
-    <div class="card c6">
-      <div class="card-h"><h3>Price drivers</h3><span class="sp"></span>
-        <span class="sub">next 24 h vs the day before</span></div>
+  <div class="acc" id="acc-drv">
+    <button class="acc-head" aria-expanded="false"><span class="acc-t">Price drivers</span>
+      <span class="acc-sum" id="sum-drv"></span><span class="chev">›</span></button>
+    <div class="acc-body"><div class="acc-inner"><div class="acc-pad">
+      <div class="disclosure" style="margin:0 0 10px">Next 24 h against the day before.</div>
       <div class="drv" id="drivers-full"></div>
-    </div>
-    <div class="card c6">
-      <div class="card-h"><h3>Cross-border flows</h3><span class="sp"></span>
-        <span class="sub">mean physical flow</span></div>
-      <div id="flows-list"></div>
-    </div>
-  </section>
+    </div></div></div>
+  </div>
 
-  <!-- ===== PORTFOLIO ===== -->
-  <section class="card stack">
-    <div class="card-h"><h3>Your portfolio</h3><span class="sp"></span>
-      <span class="sub">what these forecasts mean for an asset you own</span></div>
-    <div class="tabs" id="ptabs" role="tablist">
-      <button role="tab" data-p="solar" aria-selected="true">Solar</button>
-      <button role="tab" data-p="wind" aria-selected="false">Wind</button>
-      <button role="tab" data-p="battery" aria-selected="false">Battery</button>
-      <button role="tab" data-p="ev" aria-selected="false">EV charging</button>
-    </div>
-
-    <div class="pane on" id="p-solar">
-      <div class="fields">
-        <div class="f"><label for="i-kwp">System size (kWp)</label>
-          <input id="i-kwp" type="number" value="10" min="1" max="100000" step="1"></div>
-        <div class="f"><label for="i-capex">Install cost (€/kWp)</label>
-          <input id="i-capex" type="number" value="1200" min="0" max="10000" step="50"></div>
-        <div class="hint">Site: <b id="solar-pt">—</b> · click the map to move it</div>
+  <div class="acc" id="acc-assets">
+    <button class="acc-head" aria-expanded="false"><span class="acc-t">Your assets</span>
+      <span class="acc-sum" id="sum-assets"></span><span class="chev">›</span></button>
+    <div class="acc-body"><div class="acc-inner"><div class="acc-pad">
+      <div class="tabs" id="ptabs" role="tablist">
+        <button role="tab" data-p="solar" aria-selected="true">Solar</button>
+        <button role="tab" data-p="wind" aria-selected="false">Wind</button>
+        <button role="tab" data-p="battery" aria-selected="false">Battery</button>
+        <button role="tab" data-p="ev" aria-selected="false">EV charging</button>
       </div>
-      <div class="stats" id="o-solar"></div>
-      <div class="advice" id="a-solar"></div>
-    </div>
-
-    <div class="pane" id="p-wind">
-      <div class="fields">
-        <div class="f"><label for="i-mw">Turbine rating (MW)</label>
-          <input id="i-mw" type="number" value="3" min="0.1" max="20" step="0.1"></div>
-        <div class="hint">Site: <b id="wind-pt">—</b> · click the map to move it</div>
+      <div class="pane on" id="p-solar">
+        <div class="fields">
+          <div class="f"><label for="i-kwp">System size (kWp)</label>
+            <input id="i-kwp" type="number" value="10" min="1" max="100000" step="1"></div>
+          <div class="f"><label for="i-capex">Install cost (€/kWp)</label>
+            <input id="i-capex" type="number" value="1200" min="0" max="10000" step="50"></div>
+          <div class="hint">Site: <b id="solar-pt">—</b> · click the map to move it</div>
+        </div>
+        <div class="stats" id="o-solar"></div>
+        <div class="advice" id="a-solar"></div>
       </div>
-      <div class="stats" id="o-wind"></div>
-      <div class="advice" id="a-wind"></div>
-      <svg id="c-wind" class="chart" viewBox="0 0 900 190" style="margin-top:14px"></svg>
-    </div>
-
-    <div class="pane" id="p-battery">
-      <div class="fields">
-        <div class="f"><label for="i-bmwh">Capacity (MWh)</label>
-          <input id="i-bmwh" type="number" value="10" min="0.1" max="1000" step="0.5"></div>
-        <div class="f"><label for="i-beff">Round-trip eff. (%)</label>
-          <input id="i-beff" type="number" value="88" min="50" max="100" step="1"></div>
+      <div class="pane" id="p-wind">
+        <div class="fields">
+          <div class="f"><label for="i-mw">Turbine rating (MW)</label>
+            <input id="i-mw" type="number" value="3" min="0.1" max="20" step="0.1"></div>
+          <div class="hint">Site: <b id="wind-pt">—</b> · click the map to move it</div>
+        </div>
+        <div class="stats" id="o-wind"></div>
+        <div class="advice" id="a-wind"></div>
+        <svg id="c-wind" class="chart" viewBox="0 0 900 190" style="margin-top:14px"></svg>
       </div>
-      <div class="stats" id="o-batt"></div>
-      <div class="advice" id="a-batt"></div>
-    </div>
-
-    <div class="pane" id="p-ev">
-      <div class="fields">
-        <div class="f"><label for="i-kwh">Battery (kWh)</label>
-          <input id="i-kwh" type="number" value="60" min="1" max="500" step="1"></div>
-        <div class="f"><label for="i-soc">Charge needed (%)</label>
-          <input id="i-soc" type="number" value="70" min="1" max="100" step="1"></div>
+      <div class="pane" id="p-battery">
+        <div class="fields">
+          <div class="f"><label for="i-bmwh">Capacity (MWh)</label>
+            <input id="i-bmwh" type="number" value="10" min="0.1" max="1000" step="0.5"></div>
+          <div class="f"><label for="i-beff">Round-trip eff. (%)</label>
+            <input id="i-beff" type="number" value="88" min="50" max="100" step="1"></div>
+        </div>
+        <div class="stats" id="o-batt"></div>
+        <div class="advice" id="a-batt"></div>
       </div>
-      <div class="stats" id="o-ev"></div>
-      <div class="advice" id="a-ev"></div>
-    </div>
-  </section>
+      <div class="pane" id="p-ev">
+        <div class="fields">
+          <div class="f"><label for="i-kwh">Battery (kWh)</label>
+            <input id="i-kwh" type="number" value="60" min="1" max="500" step="1"></div>
+          <div class="f"><label for="i-soc">Charge needed (%)</label>
+            <input id="i-soc" type="number" value="70" min="1" max="100" step="1"></div>
+        </div>
+        <div class="stats" id="o-ev"></div>
+        <div class="advice" id="a-ev"></div>
+      </div>
+    </div></div></div>
+  </div>
 
-  <!-- ===== QUALITY + NEWS ===== -->
-  <section class="grid stack">
-    <div class="card c6">
-      <div class="card-h"><h3>Forecast quality</h3><span class="sp"></span>
-        <span class="sub">measured out-of-sample</span></div>
+  <div class="acc" id="acc-quality">
+    <button class="acc-head" aria-expanded="false"><span class="acc-t">Forecast quality</span>
+      <span class="acc-sum" id="sum-quality"></span><span class="chev">›</span></button>
+    <div class="acc-body"><div class="acc-inner"><div class="acc-pad">
       <div class="stats" id="quality"></div>
-      <div class="card-h" style="margin:18px 0 8px"><h3 style="font-size:12px">
-        Forecast vs actual — 48 h the model never saw</h3></div>
+      <div class="mini-t">Forecast vs actual — 48 h the model never saw</div>
       <svg id="c-replay" class="chart" viewBox="0 0 640 190"></svg>
       <div class="disclosure" id="model-meta"></div>
-    </div>
+    </div></div></div>
+  </div>
 
-    <div class="card c6">
-      <div class="card-h"><h3>Market news</h3><span class="sp"></span>
-        <span class="sub">Google News</span></div>
+  <div class="acc" id="acc-news">
+    <button class="acc-head" aria-expanded="false"><span class="acc-t">Market news</span>
+      <span class="acc-sum" id="sum-news"></span><span class="chev">›</span></button>
+    <div class="acc-body"><div class="acc-inner"><div class="acc-pad">
       <div class="news" id="news"></div>
       <div class="disclosure">
         Headlines and links come straight from publishers. The impact tag is a simple
         keyword match on the headline — a rough hint, not analysis, and not an input to
         any forecast on this page.
       </div>
-    </div>
-  </section>
+    </div></div></div>
+  </div>
 
-  <!-- ===== CAPACITY (collapsible) ===== -->
-  <section class="card stack" id="capsec">
-    <div class="card-h"><h3>Grid build-out</h3><span class="sp"></span>
-      <span class="sub" id="cap-key"></span>
-      <button class="ctrl" id="cap-toggle" style="height:28px;font-size:12px">Show</button></div>
-    <div id="cap-body" style="display:none"><svg id="c-cap" class="chart" viewBox="0 0 900 260"></svg></div>
-  </section>
+  <div class="acc" id="capsec">
+    <button class="acc-head" aria-expanded="false"><span class="acc-t">Grid build-out</span>
+      <span class="acc-sum" id="sum-cap"></span><span class="chev">›</span></button>
+    <div class="acc-body"><div class="acc-inner"><div class="acc-pad">
+      <div class="legend" id="cap-key" style="margin-bottom:6px"></div>
+      <svg id="c-cap" class="chart" viewBox="0 0 900 260"></svg>
+    </div></div></div>
+  </div>
 
   <p class="disclosure" id="sources" style="margin-top:16px"></p>
 </div>
@@ -901,7 +925,7 @@ function heatmap(){
 
 /* ================= KPI cards ================= */
 function kpiCard(o){
-  var d=document.createElement("div");d.className="card c3 kpi";
+  var d=document.createElement("div");d.className="kpi";
   var dc=o.delta==null?"flat":(o.delta>0?"up":(o.delta<0?"down":"flat"));
   // Colour by MEANING: for carbon and price, up is bad for a buyer.
   if(o.invert&&dc!=="flat")dc=dc==="up"?"down":"up";
@@ -991,7 +1015,6 @@ function renderInsight(){
     });
     if(!rows||!rows.length)h.innerHTML='<div class="empty">No driver data.</div>';
   }
-  drvRows("ins-drivers",(D.drivers||[]).slice(0,5));
   drvRows("drivers-full",D.drivers);
   document.getElementById("ins-note").textContent=m.note||"";
 }
@@ -1561,7 +1584,7 @@ function renderAll(){
   renderKpis();renderInsight();renderFlows();renderQuality();renderNews();renderRisk();
   if(D.capacity)capChart("c-cap",D.capacity);
   else document.getElementById("capsec").style.display="none";
-  renderExplain();renderTool();
+  renderExplain();updateSummaries();renderTool();
   document.getElementById("price-sub").textContent=
     "updated "+new Date(D.updated_utc).toLocaleString("en-GB",
       {day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+" · times in your timezone";
@@ -1590,6 +1613,57 @@ function load(c){
   });
 }
 
+function setSum(id,t){var e=document.getElementById(id);if(e)e.textContent=t||"";}
+/* The rows open on demand, so their single closed line has to carry the point:
+   each summary is computed from the same data the open row would show. */
+function updateSummaries(){
+  if(!D)return;
+  var k=D.kpis,f=D.forecast;
+  setSum("sum-now",num(k.last_price_eur_mwh,0)+" \u20ac/MWh"+
+    (k.carbon_now_g_kwh!=null?" \u00b7 "+num(k.carbon_now_g_kwh,0)+" g":"")+
+    " \u00b7 "+num(k.renewable_share_pct,0)+"% renewable");
+  var wm=d3.max(f.wind_mw)||0,sm=d3.max(f.solar_mw)||0;
+  setSum("sum-gen","wind peaks "+num(wm/1000,1)+" GW \u00b7 solar "+num(sm/1000,1)+" GW");
+  var cnt={};f.signal.forEach(function(x){cnt[x]=(cnt[x]||0)+1;});
+  setSum("sum-sig",["SELL","DISCHARGE","STORE","CURTAIL","HOLD"]
+    .filter(function(x){return cnt[x];})
+    .map(function(x){return cnt[x]+" "+x.toLowerCase();}).join(" \u00b7 "));
+  var top=(D.drivers||[]).filter(function(r){return r.delta!=null;})
+    .sort(function(a,b){return Math.abs(b.delta_pct||0)-Math.abs(a.delta_pct||0);})[0];
+  if(top){
+    var dv=Math.abs(top.delta),du=top.unit;
+    if(du==="MW"&&dv>=1000){dv=dv/1000;du="GW";}   // 18,559 MW reads as noise
+    setSum("sum-drv",top.name+" "+(top.delta>0?"+":"−")+num(dv,du==="GW"?1:0)+" "+du);
+  }else setSum("sum-drv","");
+  var cap=D.capture||{},bits=[];
+  if(cap.solar_capture_pct!=null)bits.push("solar captures "+cap.solar_capture_pct+"%");
+  if(cap.wind_capture_pct!=null)bits.push("wind "+cap.wind_capture_pct+"%");
+  setSum("sum-assets",bits.join(" \u00b7 "));
+  var m=D.metrics;
+  setSum("sum-quality",m?"error "+m.gen_mae_pct+"% \u00b7 coverage "+m.price_coverage_pct+"%"
+    :"no out-of-sample run");
+  var ns=D.news||[],pr=0,ch=0;
+  ns.forEach(function(x){if(x.impact==="bearish")pr++;else if(x.impact==="bullish")ch++;});
+  setSum("sum-news",ns.length?ns.length+" headlines"+(pr?" \u00b7 "+pr+" pricier":"")+
+    (ch?" \u00b7 "+ch+" cheaper":""):"none found");
+  var sc="";
+  if(D.capacity){
+    var yrs=D.capacity.years.map(Number),ty=new Date().getUTCFullYear(),best=null;
+    Object.keys(D.capacity.types).forEach(function(n){
+      // planned build-out is not installed; Solar DC re-rates the same
+      // panels Solar AC counts, so it must not outrank it here either.
+      if(/planned|capacity\)|Solar DC/i.test(n))return;
+      var ser=D.capacity.types[n],v=null;
+      for(var i=yrs.length-1;i>=0;i--){
+        if(yrs[i]>ty)continue;
+        if(ser[i]!=null){v=ser[i];break;}
+      }
+      if(v!=null&&(!best||v>best.v))best={n:n,v:v};
+    });
+    if(best)sc=best.n+" "+num(best.v,0)+" GW installed";
+  }
+  setSum("sum-cap",sc);
+}
 function deselect(){
   code=null;
   document.getElementById("stage").classList.remove("detail");
@@ -1603,6 +1677,12 @@ function deselect(){
 
 /* ================= boot ================= */
 document.getElementById("back").addEventListener("click",deselect);
+document.querySelectorAll(".acc-head").forEach(function(b){
+  b.addEventListener("click",function(){
+    var open=b.parentNode.classList.toggle("open");
+    b.setAttribute("aria-expanded",String(open));
+  });
+});
 document.getElementById("btn-theme").addEventListener("click",function(){
   setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");});
 document.getElementById("btn-settings").addEventListener("click",function(){
@@ -1681,10 +1761,6 @@ document.getElementById("mtabs").addEventListener("click",function(e){
   metric=b.dataset.m;
   d3.selectAll("#mtabs button").attr("aria-pressed",function(){return String(this===b);});
   paintMap();});
-document.getElementById("cap-toggle").addEventListener("click",function(){
-  var b=document.getElementById("cap-body"),on=b.style.display==="none";
-  b.style.display=on?"":"none";this.textContent=on?"Hide":"Show";
-  if(on&&D&&D.capacity)capChart("c-cap",D.capacity);});
 
 document.getElementById("navdate").textContent=
   new Date().toLocaleDateString("en-GB",{weekday:"short",day:"2-digit",month:"short",year:"numeric"});
