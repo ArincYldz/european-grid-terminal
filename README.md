@@ -1,4 +1,7 @@
-# European Electricity Market — Intraday Price & Risk Forecasting Bot
+# European Grid Terminal — Intraday Price & Risk Forecasting
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Tests](https://github.com/ArincYldz/european-grid-terminal/actions/workflows/ci.yml/badge.svg)](https://github.com/ArincYldz/european-grid-terminal/actions/workflows/ci.yml)
 
 An AI system that forecasts renewable generation and intraday electricity
 prices, scores negative-price risk, and turns forecasts into STORE / SELL /
@@ -188,3 +191,8 @@ python tests/test_storage_transform.py
 python tests/test_extras.py       # flow reconciliation, capture rates
 python tests/test_explain.py      # SHAP additivity, similar days, invalidators
 ```
+
+## License
+MIT — see [LICENSE](LICENSE). Data sources retain their own terms:
+OpenStreetMap extracts are ODbL, and Energy-Charts / PVGIS / Open-Meteo
+data remain subject to their providers' conditions.
