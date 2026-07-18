@@ -1,211 +1,209 @@
-"""One-off builder for the map's marker layers: landmarks and power plants.
+"""One-off builder for the map's decorative layer: two landmarks per country,
+plus the energy sources that country actually runs.
 
-Deliberately NOT on a schedule. Castles and power stations do not move, so this
-runs once, its output is committed, and the nightly refresh never touches it.
-Re-run it by hand only if you want to widen the tag filters or add a country.
+Deliberately NOT on a schedule, and deliberately not scraped.
 
-Two things this job has to get right, both learned by measuring first:
+Why curated rather than queried: an earlier version pulled landmarks from
+OpenStreetMap by tag. It returned 300 hits for Austria of which 156 were
+`historic=memorial` (local plaques), ranked "Steinpyramide" above anything a
+visitor would recognise, and timed out entirely on Germany. Ranking by OSM tags
+does not mean fame. The map wants the Brandenburg Gate, so the list says
+Brandenburg Gate.
 
-1. **Micro-hydro would swamp the map.** Austria alone returns 400 `power=plant`
-   objects and 369 are hydro, many of them 9 kW mill races. Plotting all of
-   them says nothing about the grid. So capacities are parsed to MW and only
-   the largest plants per source survive.
+Landmark coordinates are APPROXIMATE — city-accurate, which is all that can
+matter when one screen pixel spans several kilometres. They position a small
+decorative glyph, nothing is measured from them, and no forecast depends on
+them.
 
-2. **Most `historic=memorial` objects are local plaques**, not landmarks — 156
-   of Austria's 300 hits. They are dropped. What is left (castles, monuments,
-   cathedrals, attractions) is additionally required to carry a `wikidata` tag,
-   which is a decent proxy for "someone considered this notable".
+The energy icons are the opposite: those come from real installed capacity in
+each country's own payload (Energy-Charts), so a country only shows a nuclear
+icon if it actually has nuclear capacity on the grid.
 
 Output: webapp/site/data/landmarks.json
 
-Run:  python webapp/build_landmarks.py            (skips countries already done)
-      python webapp/build_landmarks.py --force    (rebuild everything)
-      python webapp/build_landmarks.py at de      (specific countries)
+Run:  python webapp/build_landmarks.py
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import re
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.ingestion.energy_extras import _overpass
-
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger("landmarks")
 
-OUT = Path(__file__).parent / "site" / "data" / "landmarks.json"
-PAUSE_S = 8.0
-MAX_LANDMARKS = 40          # per country — enough to feel populated, not a blanket
-MAX_PLANTS_PER_SOURCE = 25  # per country per source, largest first
+SITE_DATA = Path(__file__).parent / "site" / "data"
+OUT = SITE_DATA / "landmarks.json"
 
-ISO2 = {
-    "de": "DE", "at": "AT", "be": "BE", "bg": "BG", "ch": "CH", "cz": "CZ",
-    "dk": "DK", "ee": "EE", "es": "ES", "fi": "FI", "fr": "FR", "gr": "GR",
-    "hr": "HR", "hu": "HU", "it": "IT", "lt": "LT", "lu": "LU", "lv": "LV",
-    "nl": "NL", "no": "NO", "pl": "PL", "pt": "PT", "ro": "RO", "rs": "RS",
-    "se": "SE", "si": "SI", "sk": "SK", "me": "ME",
+# (name, glyph, lat, lon) — two per country, picked for recognisability.
+# Glyphs are drawn in the frontend; see GLYPHS there for the full set.
+LANDMARKS: dict[str, list[tuple]] = {
+    "at": [("Schönbrunn Palace", "palace", 48.185, 16.312),
+           ("St. Stephen's Cathedral", "cathedral", 48.209, 16.373)],
+    "be": [("Atomium", "sphere", 50.895, 4.341),
+           ("Grand-Place", "guildhall", 50.847, 4.352)],
+    "bg": [("Alexander Nevsky Cathedral", "dome", 42.696, 23.333),
+           ("Rila Monastery", "monastery", 42.133, 23.340)],
+    "ch": [("Matterhorn", "mountain", 45.976, 7.658),
+           ("Chapel Bridge, Lucerne", "bridge", 47.052, 8.307)],
+    "cz": [("Prague Castle", "castle", 50.090, 14.400),
+           ("Charles Bridge", "bridge", 50.086, 14.411)],
+    "de": [("Brandenburg Gate", "gate", 52.516, 13.378),
+           ("Cologne Cathedral", "cathedral", 50.941, 6.958)],
+    "dk": [("The Little Mermaid", "statue", 55.693, 12.599),
+           ("Nyhavn", "harbour", 55.680, 12.591)],
+    "ee": [("Toompea Castle, Tallinn", "castle", 59.436, 24.740),
+           ("Kadriorg Palace", "palace", 59.438, 24.791)],
+    "es": [("Sagrada Família", "cathedral", 41.404, 2.174),
+           ("Alhambra", "fortress", 37.176, -3.588)],
+    "fi": [("Helsinki Cathedral", "dome", 60.170, 24.952),
+           ("Suomenlinna", "fortress", 60.145, 24.988)],
+    "fr": [("Eiffel Tower", "tower", 48.858, 2.294),
+           ("Mont-Saint-Michel", "monastery", 48.636, -1.511)],
+    "gr": [("Parthenon", "temple", 37.971, 23.727),
+           ("Santorini", "dome", 36.393, 25.461)],
+    "hr": [("Dubrovnik City Walls", "fortress", 42.641, 18.108),
+           ("Diocletian's Palace", "palace", 43.508, 16.440)],
+    "hu": [("Hungarian Parliament", "parliament", 47.507, 19.046),
+           ("Tihany Abbey", "monastery", 46.914, 17.888)],
+    "it": [("Colosseum", "colosseum", 41.890, 12.492),
+           ("Leaning Tower of Pisa", "leaning", 43.723, 10.396)],
+    "lt": [("Gediminas Tower", "tower", 54.687, 25.291),
+           ("Trakai Island Castle", "castle", 54.652, 24.933)],
+    "lu": [("Bock Casemates", "fortress", 49.611, 6.134),
+           ("Vianden Castle", "castle", 49.935, 6.208)],
+    "lv": [("House of the Blackheads", "guildhall", 56.947, 24.107),
+           ("Rundāle Palace", "palace", 56.414, 24.024)],
+    "me": [("Sveti Stefan", "harbour", 42.256, 18.892),
+           ("Kotor Old Town", "fortress", 42.424, 18.771)],
+    "nl": [("Kinderdijk Windmills", "windmill", 51.884, 4.640),
+           ("Amsterdam Canals", "guildhall", 52.360, 4.885)],
+    "no": [("Geirangerfjord", "mountain", 62.101, 7.005),
+           ("Bryggen, Bergen", "harbour", 60.397, 5.324)],
+    "pl": [("Wawel Castle", "castle", 50.054, 19.935),
+           ("Warsaw Royal Castle", "palace", 52.248, 21.014)],
+    "pt": [("Belém Tower", "tower", 38.692, -9.216),
+           ("Pena Palace", "palace", 38.788, -9.391)],
+    "ro": [("Bran Castle", "castle", 45.515, 25.367),
+           ("Palace of the Parliament", "parliament", 44.428, 26.088)],
+    "rs": [("Belgrade Fortress", "fortress", 44.823, 20.451),
+           ("Church of Saint Sava", "dome", 44.798, 20.469)],
+    "se": [("Stockholm Royal Palace", "palace", 59.327, 18.072),
+           ("Visby City Wall", "fortress", 57.640, 18.296)],
+    "si": [("Lake Bled Church", "monastery", 46.362, 14.088),
+           ("Ljubljana Castle", "castle", 46.049, 14.508)],
+    "sk": [("Bratislava Castle", "castle", 48.142, 17.100),
+           ("St. Elisabeth Cathedral", "cathedral", 48.720, 21.258)],
 }
 
-_UNIT_TO_MW = {"w": 1e-6, "kw": 1e-3, "mw": 1.0, "gw": 1e3}
+# Installed-capacity type names (Energy-Charts) folded into the four icons.
+#
+# Two traps here, both found by checking Germany against reality:
+#
+#  - "Solar AC" (114.8 GW) and "Solar DC" (126.1 GW) are the SAME panels rated
+#    at the inverter and at the module. Adding them gave 240.9 GW for a country
+#    with roughly 100. So solar TAKES THE FIRST NAME PRESENT rather than summing,
+#    preferring the AC/grid-facing figure that is comparable with wind and
+#    nuclear ratings.
+#  - Pumped storage is a store, not a source: it consumes about as much as it
+#    returns. It is excluded, which leaves Germany on 5.3 GW of real hydro.
+#
+# Wind onshore + offshore ARE distinct assets, so those genuinely sum.
+SOURCE_MAP = {
+    "solar": (("Solar AC", "Solar DC", "Solar"), "first"),
+    "wind": (("Wind onshore", "Wind offshore"), "sum"),
+    "hydro": (("Hydro", "Hydro Run-of-River", "Hydro water reservoir"), "sum"),
+    "nuclear": (("Nuclear",), "sum"),
+}
+MIN_GW = 0.15   # below this a source is a rounding error, not part of the mix
 
 
-def parse_mw(raw: str | None) -> float | None:
-    """`plant:output:electricity` is free text: '6 MW', '142 kW', '11200 kW'.
+def energy_mix(code: str) -> list[dict]:
+    """Which of solar / wind / hydro / nuclear this country actually runs.
 
-    Returns megawatts, or None when the value is unparseable (`yes`, ranges,
-    blanks). Unparseable is common enough that callers must handle it rather
-    than assume zero — a plant with no capacity tag is not a 0 MW plant.
+    Reads the country's own payload, so the icons follow real installed
+    capacity rather than an assumption. Uses the most recent year that has a
+    number — the feed runs a few years ahead with planned build-out, and we
+    want what exists, not what is scheduled.
     """
-    if not raw:
-        return None
-    m = re.match(r"\s*([\d.,]+)\s*([kMGw]*[Ww]?)", str(raw).strip())
-    if not m:
-        return None
+    path = SITE_DATA / f"{code}.json"
+    if not path.exists():
+        return []
     try:
-        val = float(m.group(1).replace(",", "."))
-    except ValueError:
+        cap = json.loads(path.read_text(encoding="utf-8")).get("capacity")
+    except (ValueError, OSError):
+        return []
+    if not cap:
+        return []
+
+    years, types = cap.get("years", []), cap.get("types", {})
+    try:
+        this_year = int(__import__("datetime").date.today().year)
+    except Exception:  # noqa: BLE001
+        this_year = 2026
+
+    def latest(series):
+        """Last reported value at or before the current year (the feed runs
+        ahead with planned build-out; we want what exists)."""
+        for i in range(len(years) - 1, -1, -1):
+            try:
+                if int(years[i]) > this_year:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            v = series[i] if i < len(series) else None
+            if v is not None:
+                return float(v)
         return None
-    unit = (m.group(2) or "MW").lower()
-    if not unit.endswith("w"):
-        unit += "w"
-    return val * _UNIT_TO_MW.get(unit, 1.0)
-
-
-def _centre(elem: dict) -> tuple[float, float] | None:
-    c = elem.get("center") or elem
-    lat, lon = c.get("lat"), c.get("lon")
-    return (round(float(lat), 4), round(float(lon), 4)) if lat and lon else None
-
-
-def fetch_plants(iso: str) -> list[dict]:
-    """Major solar / wind / hydro / nuclear stations, largest first."""
-    area = f'area["ISO3166-1"="{iso}"][admin_level=2]->.a;'
-    src = '["plant:source"~"^(solar|wind|hydro|nuclear)$"]'
-    q = (f'[out:json][timeout:170];{area}('
-         f'node(area.a)["power"="plant"]{src}["name"];'
-         f'way(area.a)["power"="plant"]{src}["name"];'
-         f'relation(area.a)["power"="plant"]{src}["name"];);out center 600;')
-    els = _overpass(q).get("elements", [])
-
-    buckets: dict[str, list[dict]] = {}
-    for e in els:
-        t = e.get("tags", {})
-        pos = _centre(e)
-        if not pos:
-            continue
-        source = t.get("plant:source")
-        mw = parse_mw(t.get("plant:output:electricity"))
-        buckets.setdefault(source, []).append({
-            "name": t.get("name"), "lat": pos[0], "lon": pos[1],
-            "mw": round(mw, 1) if mw is not None else None,
-            "source": source,
-        })
 
     out = []
-    for source, rows in buckets.items():
-        # Unknown capacity sorts last: we cannot claim it is big, but a named
-        # nuclear station with no tag is still worth keeping over nothing.
-        rows.sort(key=lambda r: (r["mw"] is None, -(r["mw"] or 0)))
-        out.extend(rows[:MAX_PLANTS_PER_SOURCE])
+    for icon, (names, how) in SOURCE_MAP.items():
+        gw = 0.0
+        for n in names:
+            series = types.get(n)
+            if not series:
+                continue
+            v = latest(series)
+            if v is None:
+                continue
+            if how == "first":
+                gw = v
+                break
+            gw += v
+        if gw >= MIN_GW:
+            out.append({"source": icon, "gw": round(gw, 1)})
+    out.sort(key=lambda r: -r["gw"])
     return out
 
 
-def fetch_landmarks(iso: str) -> list[dict]:
-    """Castles, monuments, cathedrals and attractions that carry a wikidata id."""
-    area = f'area["ISO3166-1"="{iso}"][admin_level=2]->.a;'
-    hist = '["historic"~"^(castle|monument)$"]["wikidata"]["name"]'
-    attr = '["tourism"="attraction"]["wikidata"]["name"]'
-    cath = '["building"~"^(cathedral|basilica)$"]["wikidata"]["name"]'
-    q = (f'[out:json][timeout:170];{area}('
-         f'node(area.a){hist};way(area.a){hist};'
-         f'node(area.a){attr};way(area.a){attr};'
-         f'way(area.a){cath};relation(area.a){cath};);out center 400;')
-    els = _overpass(q).get("elements", [])
+def main() -> None:
+    countries = {}
+    for code, marks in LANDMARKS.items():
+        countries[code] = {
+            "landmarks": [{"name": n, "glyph": g, "lat": la, "lon": lo}
+                          for n, g, la, lo in marks],
+            "energy": energy_mix(code),
+        }
+        mix = ", ".join(f"{e['source']} {e['gw']}GW" for e in countries[code]["energy"])
+        log.info("  %s: %d landmarks | %s", code, len(marks), mix or "no capacity data")
 
-    rows = []
-    for e in els:
-        t = e.get("tags", {})
-        pos = _centre(e)
-        if not pos:
-            continue
-        if t.get("historic") in ("castle", "monument"):
-            kind = t["historic"]
-        elif t.get("building") in ("cathedral", "basilica"):
-            kind = "cathedral"
-        else:
-            kind = "attraction"
-        rows.append({
-            "name": t.get("name"), "lat": pos[0], "lon": pos[1], "kind": kind,
-            # A wikipedia article is a stronger notability signal than a bare
-            # wikidata id, and a mapped outline means someone surveyed it.
-            "_rank": (1 if t.get("wikipedia") else 0) + (1 if e.get("type") != "node" else 0),
-        })
-    rows.sort(key=lambda r: -r["_rank"])
-    for r in rows:
-        r.pop("_rank", None)
-    return rows[:MAX_LANDMARKS]
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps({
+        "note": ("Landmark positions are approximate and decorative — city-accurate, "
+                 "which is all that resolves at this map scale. Nothing is measured "
+                 "from them. Energy icons come from real installed capacity "
+                 "(Energy-Charts) in each country's own payload."),
+        "countries": countries,
+    }, ensure_ascii=False), encoding="utf-8")
 
-
-def main(only: list[str] | None = None, force: bool = False) -> None:
-    data = {}
-    if OUT.exists() and not force:
-        try:
-            data = json.loads(OUT.read_text(encoding="utf-8")).get("countries", {})
-        except (ValueError, OSError):
-            data = {}
-
-    targets = [c for c in ISO2 if not only or c in only]
-    done = failed = 0
-
-    for cc in targets:
-        if cc in data and not force and not only:
-            continue
-        iso = ISO2[cc]
-        entry = data.get(cc, {})
-        try:
-            entry["plants"] = fetch_plants(iso)
-            log.info("  %s: %d plants", cc, len(entry["plants"]))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("  %s plants failed: %s", cc, str(exc)[:70])
-            entry.setdefault("plants", [])
-        time.sleep(PAUSE_S)
-
-        try:
-            entry["landmarks"] = fetch_landmarks(iso)
-            log.info("  %s: %d landmarks", cc, len(entry["landmarks"]))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("  %s landmarks failed: %s", cc, str(exc)[:70])
-            entry.setdefault("landmarks", [])
-        time.sleep(PAUSE_S)
-
-        if entry.get("plants") or entry.get("landmarks"):
-            data[cc] = entry
-            done += 1
-        else:
-            failed += 1
-
-        # Checkpoint after every country: Overpass drops connections often
-        # enough that losing a 40-minute sweep to one timeout is not acceptable.
-        OUT.parent.mkdir(parents=True, exist_ok=True)
-        OUT.write_text(json.dumps({
-            "source": "OpenStreetMap via Overpass API (ODbL)",
-            "note": ("Static: plant and landmark positions do not change, so this "
-                     "file is built once and committed, never refreshed on a cron."),
-            "countries": data,
-        }, ensure_ascii=False), encoding="utf-8")
-
-    tot_p = sum(len(v.get("plants", [])) for v in data.values())
-    tot_l = sum(len(v.get("landmarks", [])) for v in data.values())
-    log.info("DONE: %d countries (%d new, %d empty) — %d plants, %d landmarks, %.0f KB",
-             len(data), done, failed, tot_p, tot_l, OUT.stat().st_size / 1024)
+    n_e = sum(1 for v in countries.values() if v["energy"])
+    log.info("DONE: %d countries, %d with capacity data, %.0f KB",
+             len(countries), n_e, OUT.stat().st_size / 1024)
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    main(only=args or None, force="--force" in sys.argv)
+    main()
