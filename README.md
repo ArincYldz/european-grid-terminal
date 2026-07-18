@@ -90,7 +90,21 @@ asset calculators alongside.
 - `webapp/build_solar_grid.py` — one-off. PVGIS yield lattice over Europe.
 - `webapp/build_ev_cache.py` — weekly. EV charger counts from OpenStreetMap.
 - `webapp/build_news_cache.py` — every 6 h. Headlines from Google News RSS.
+- `webapp/build_landmarks.py` — **once, never on a cron**. Castles, monuments,
+  cathedrals and major solar/wind/hydro/nuclear stations from OSM. Positions do
+  not change, so the output is committed and the nightly job never touches it.
 - `webapp/site/` — fully static frontend, no build step.
+
+The map is the landing page: it opens whole, showing landmarks. A layer picker
+swaps to power stations by source; a second picker shades countries by price,
+carbon, renewables or EV density. Clicking a country zooms into it, keeps the
+map on the left and slides its full dashboard in on the right.
+
+Two filters keep the marker layers meaningful, both chosen after measuring:
+Austria alone returns 400 `power=plant` objects of which 369 are hydro, many
+9 kW mill races — so capacities are parsed to MW and only the largest survive
+per source. And 156 of its 300 landmark hits are `historic=memorial`, mostly
+local plaques — dropped, with a `wikidata` tag required on what remains.
 
 ### Explainable predictions
 Every forecast can be opened up. `src/models/explain.py` runs **exact TreeSHAP**

@@ -30,6 +30,7 @@
   --mono:"IBM Plex Mono",ui-monospace,monospace;
   --r:10px; --r-sm:6px;
   --pad:18px;
+  --split:.62s; --ease:cubic-bezier(.65,.02,.24,1);
 }
 html[data-theme=light]{
   --bg:#F6F7F9; --bg-2:#FFFFFF; --card:#FFFFFF; --card-2:#F3F5F7;
@@ -87,7 +88,35 @@ a:hover{text-decoration:underline}
 .date{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);white-space:nowrap}
 
 /* ============================ layout ============================ */
-main{max-width:1560px;margin:0 auto;padding:22px 20px 90px}
+/* The map IS the landing page. Selecting a country splits the stage: the map
+   keeps the left, its data slides in on the right. Only `right` and
+   `transform` animate — both compositor-friendly, so the split stays smooth
+   while the SVG underneath re-projects. */
+#stage{position:fixed;top:56px;left:0;right:0;bottom:0;overflow:hidden}
+#mapwrap{position:absolute;inset:0;background:var(--water);
+  transition:right var(--split) var(--ease);will-change:right}
+#stage.detail #mapwrap{right:56%}
+#panel{position:absolute;top:0;right:0;bottom:0;width:56%;background:var(--bg);
+  border-left:1px solid var(--line);overflow-y:auto;overscroll-behavior:contain;
+  transform:translateX(100%);transition:transform var(--split) var(--ease);
+  will-change:transform;z-index:20}
+#stage.detail #panel{transform:translateX(0)}
+#panel-in{padding:20px 22px 80px;opacity:0;transition:opacity .3s .25s}
+#stage.detail #panel-in{opacity:1}
+
+#viewport{transition:transform var(--split) var(--ease)}
+#hint{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:6;
+  font-family:var(--display);font-size:12.5px;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-2);background:color-mix(in srgb,var(--bg-2) 92%,transparent);
+  padding:8px 16px;border-radius:999px;border:1px solid var(--line);white-space:nowrap;
+  backdrop-filter:blur(8px);transition:opacity .25s}
+#stage.detail #hint{opacity:0;pointer-events:none}
+
+#back{display:inline-flex;align-items:center;gap:6px;font-family:var(--display);
+  font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);padding:5px 0;margin-bottom:14px}
+#back:hover{color:var(--accent-2)}
+
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
 .c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}
 .c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
@@ -218,10 +247,30 @@ main{max-width:1560px;margin:0 auto;padding:22px 20px 90px}
 .news .m{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-3)}
 
 /* ============================ map ============================ */
-#mapcard{padding:0;overflow:hidden}
-#map-head{display:flex;align-items:center;gap:10px;padding:14px var(--pad)}
-#mapwrap{position:relative;background:var(--water);height:470px}
 #map{width:100%;height:100%;display:block}
+#map-ctrls{position:absolute;left:16px;bottom:16px;z-index:6;display:flex;
+  flex-direction:column;gap:8px;transition:opacity .25s}
+.ctrl-group{background:color-mix(in srgb,var(--bg-2) 92%,transparent);
+  border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;
+  backdrop-filter:blur(8px);box-shadow:var(--shadow)}
+.ctrl-group .lab{font-family:var(--display);font-size:10px;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+.pills{display:flex;flex-wrap:wrap;gap:4px;max-width:296px}
+.pills button{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;
+  border:1px solid var(--line);font-size:11.5px;color:var(--ink-2);transition:.15s}
+.pills button:hover{border-color:var(--line-2);color:var(--ink)}
+.pills button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.pills button i{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+
+/* Markers sit inside the zoom group, so their radius is divided by the live
+   scale on every re-render — otherwise entering a country would inflate every
+   dot to the size of a city. */
+.mk{cursor:pointer}
+.mk circle{stroke:var(--bg-2);stroke-width:.6;vector-effect:non-scaling-stroke}
+.mk:hover circle{stroke:var(--ink);stroke-width:1.4}
+.mk-lm{fill:var(--warn)}
+.mk-solar{fill:var(--solar)}.mk-wind{fill:var(--wind)}
+.mk-hydro{fill:var(--hydro)}.mk-nuclear{fill:#A78BFA}
 .land{fill:var(--land);stroke:var(--bg);stroke-width:.5;vector-effect:non-scaling-stroke}
 .land.data{fill:var(--land-2);cursor:pointer;transition:fill .2s}
 .land.data:hover{fill:var(--accent-dim)}
@@ -311,8 +360,19 @@ main{max-width:1560px;margin:0 auto;padding:22px 20px 90px}
   .c8,.c7{grid-column:span 12}.c4,.c5{grid-column:span 12}
   .c6{grid-column:span 12}.c3{grid-column:span 6}
 }
+@media (max-width:980px){
+  /* A 44/56 split has no room on a phone: the map keeps the top of the screen
+     and the panel becomes a sheet over it. */
+  #stage.detail #mapwrap{right:0}
+  #panel{width:100%;top:auto;height:76%;transform:translateY(100%);
+    border-left:none;border-top:1px solid var(--line-2);
+    border-radius:14px 14px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.35)}
+  #stage.detail #panel{transform:translateY(0)}
+  #map-ctrls{left:10px;bottom:10px}
+  .pills{max-width:calc(100vw - 60px)}
+}
 @media (max-width:720px){
-  main{padding:16px 13px 80px}
+  #panel-in{padding:16px 13px 80px}
   .grid{gap:12px}
   .c3{grid-column:span 12}
   #nav{gap:9px;padding:0 13px}
@@ -356,7 +416,43 @@ main{max-width:1560px;margin:0 auto;padding:22px 20px 90px}
   <button class="ctrl primary" id="btn-chat">✨ Ask the data</button>
 </nav>
 
-<main>
+<div id="stage" class="landing">
+<div id="mapwrap">
+  <svg id="map" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" role="img"
+       aria-label="Map of Europe. Select a country to open its market data."></svg>
+  <div id="maptip" role="tooltip"></div>
+  <div id="maplegend"></div>
+  <div id="hint">Click a country</div>
+
+  <div id="map-ctrls">
+    <div class="ctrl-group">
+      <div class="lab">Show on map</div>
+      <div class="pills" id="layers" role="group" aria-label="Map markers">
+        <button data-l="landmarks" aria-pressed="true"><i style="background:var(--warn)"></i>Landmarks</button>
+        <button data-l="solar" aria-pressed="false"><i style="background:var(--solar)"></i>Solar</button>
+        <button data-l="wind" aria-pressed="false"><i style="background:var(--wind)"></i>Wind</button>
+        <button data-l="hydro" aria-pressed="false"><i style="background:var(--hydro)"></i>Hydro</button>
+        <button data-l="nuclear" aria-pressed="false"><i style="background:#A78BFA"></i>Nuclear</button>
+        <button data-l="none" aria-pressed="false">None</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <div class="lab">Shade countries by</div>
+      <div class="pills" id="mtabs" role="group" aria-label="Map shading">
+        <button data-m="none" aria-pressed="true">Plain</button>
+        <button data-m="last_price_eur_mwh" aria-pressed="false">Price</button>
+        <button data-m="carbon_now_g_kwh" aria-pressed="false">Carbon</button>
+        <button data-m="renewable_share_pct" aria-pressed="false">Renewables</button>
+        <button data-m="ev_density" aria-pressed="false">EV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<aside id="panel" aria-live="polite">
+<div id="panel-in">
+  <button id="back">‹ Back to map</button>
+
   <!-- ===== HERO KPIs ===== -->
   <section class="grid" id="kpis" aria-label="Key indicators"></section>
 
@@ -552,30 +648,10 @@ main{max-width:1560px;margin:0 auto;padding:22px 20px 90px}
     <div id="cap-body" style="display:none"><svg id="c-cap" class="chart" viewBox="0 0 900 260"></svg></div>
   </section>
 
-  <!-- ===== MAP ===== -->
-  <section class="card stack" id="mapcard">
-    <div id="map-head">
-      <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-2)">
-        European grid</h3>
-      <span class="sp"></span>
-      <div class="tabs" id="mtabs" style="margin:0">
-        <button data-m="none" aria-selected="true">Plain</button>
-        <button data-m="last_price_eur_mwh" aria-selected="false">Price</button>
-        <button data-m="carbon_now_g_kwh" aria-selected="false">Carbon</button>
-        <button data-m="renewable_share_pct" aria-selected="false">Renewables</button>
-        <button data-m="ev_density" aria-selected="false">EV</button>
-      </div>
-    </div>
-    <div id="mapwrap">
-      <svg id="map" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" role="img"
-           aria-label="Map of Europe. Select a country to load its market."></svg>
-      <div id="maptip" role="tooltip"></div>
-      <div id="maplegend"></div>
-    </div>
-  </section>
-
   <p class="disclosure" id="sources" style="margin-top:16px"></p>
-</main>
+</div>
+</aside>
+</div>
 
 <!-- ===== EXPLAIN MODAL ===== -->
 <div class="scrim" id="scrim"></div>
@@ -611,6 +687,7 @@ main{max-width:1560px;margin:0 auto;padding:22px 20px 90px}
 var FLAG="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/";
 var VBW=1000,VBH=620;
 var IDX={},FLOWS=null,SOLAR=null,D=null,code=null,metric="none",tool="solar";
+var LANDMARKS=null,layer="landmarks",zoomScale=1,markerG=null;
 var featById={},byName={},PATH=null,PROJ=null,site={lat:null,lon:null};
 
 var cs=getComputedStyle(document.documentElement);
@@ -1329,6 +1406,7 @@ function initChat(){
   CHAT_Q.forEach(function(c){
     var b=document.createElement("button");b.className="chip";b.textContent=c.q;
     b.addEventListener("click",function(){
+      if(!D){chatSay("Pick a country on the map first.");return;}
       chatSay(esc(c.q),"u");
       setTimeout(function(){chatSay(c.fn()+'<span class="n">Computed from '+
         esc(D.name_en)+"'s data — not a language model.</span>");},160);
@@ -1408,6 +1486,84 @@ function anchorFor(c,elm){
     if(d>bd){bd=d;best=p;}});
   return best;
 }
+/* ================= markers: landmarks & power plants ================= */
+var KIND_ICON={castle:"🏰",monument:"🗿",cathedral:"⛪",attraction:"📍"};
+function drawMarkers(){
+  if(!markerG)return;
+  markerG.selectAll("*").remove();
+  if(layer==="none"||!LANDMARKS)return;
+
+  var tip=document.getElementById("maptip"),wrap=document.getElementById("mapwrap");
+  var rows=[];
+  Object.keys(LANDMARKS.countries).forEach(function(cc){
+    var e=LANDMARKS.countries[cc];
+    if(layer==="landmarks"){
+      (e.landmarks||[]).forEach(function(l){rows.push({cc:cc,type:"lm",d:l});});
+    }else{
+      (e.plants||[]).forEach(function(p){
+        if(p.source===layer)rows.push({cc:cc,type:"plant",d:p});});
+    }
+  });
+  if(!rows.length)return;
+
+  // Plant dots are scaled by capacity on a sqrt scale, so AREA tracks MW and a
+  // 1 GW station does not visually swallow the map. Radius is divided by the
+  // live zoom so markers keep a constant on-screen size.
+  var caps=rows.filter(function(r){return r.type==="plant"&&r.d.mw;})
+               .map(function(r){return r.d.mw;});
+  var rScale=caps.length
+    ? d3.scaleSqrt().domain([d3.min(caps),d3.max(caps)]).range([2.2,7.5]).clamp(true)
+    : function(){return 3.2;};
+
+  rows.forEach(function(r){
+    var p=PROJ([r.d.lon,r.d.lat]);
+    if(!p||!isFinite(p[0]))return;
+    var rad=(r.type==="lm"?3.0:(r.d.mw?rScale(r.d.mw):2.4))/zoomScale;
+    var g=markerG.append("g").attr("class","mk mk-"+(r.type==="lm"?"lm":r.d.source));
+    g.append("circle").attr("cx",p[0]).attr("cy",p[1]).attr("r",rad);
+    g.on("mousemove",function(e){
+      var rc=wrap.getBoundingClientRect();
+      tip.style.display="block";
+      tip.style.left=Math.min(e.clientX-rc.left+14,rc.width-250)+"px";
+      tip.style.top=Math.min(e.clientY-rc.top+14,rc.height-80)+"px";
+      var sub=r.type==="lm"
+        ? (KIND_ICON[r.d.kind]||"📍")+" "+r.d.kind
+        : (r.d.mw!=null?num(r.d.mw,1)+" MW "+r.d.source:r.d.source+" plant, capacity not tagged");
+      tip.innerHTML='<div class="n"><span class="fi" style="background-image:url('+FLAG+r.cc+
+        '.svg)"></span>'+esc(r.d.name||"—")+'</div><div class="v">'+esc(sub)+'</div>';
+      e.stopPropagation();
+    }).on("mouseout",function(){tip.style.display="none";});
+  });
+}
+function setLayer(l){
+  layer=l;
+  d3.selectAll("#layers button").attr("aria-pressed",function(){
+    return String(this.dataset.l===l);});
+  drawMarkers();
+}
+function focusTransform(feat){
+  var b=PATH.bounds(feat),bw=b[1][0]-b[0][0],bh=b[1][1]-b[0][1];
+  var cx=(b[0][0]+b[1][0])/2,cy=(b[0][1]+b[1][1])/2;
+  // preserveAspectRatio="meet" keeps the WHOLE viewBox on screen and letterboxes
+  // it when the panel narrows the column, so the country centres on the viewBox
+  // centre. 0.55 leaves a ring of neighbours for context.
+  var s=Math.max(1.2,Math.min(Math.min(VBW/bw,VBH/bh)*0.55,7));
+  return {t:"translate("+(VBW/2-cx*s)+","+(VBH/2-cy*s)+") scale("+s+")",s:s};
+}
+function zoomTo(c){
+  var f=featById[c];
+  if(!f){resetZoom();return;}
+  var z=focusTransform(largest(f));
+  zoomScale=z.s;
+  d3.select("#viewport").attr("transform",z.t);
+  drawMarkers();
+}
+function resetZoom(){
+  zoomScale=1;
+  d3.select("#viewport").attr("transform",null);
+  drawMarkers();
+}
+
 function drawFlows(g){
   if(!FLOWS||!FLOWS.edges)return;
   var mx=d3.max(FLOWS.edges,function(e){return e.gw;})||1;
@@ -1496,6 +1652,9 @@ function load(c){
   d3.selectAll("#lands path.data").classed("sel",function(){
     return this.getAttribute("data-code")===c;});
   try{localStorage.setItem("gt-country",c);}catch(e){}
+  document.getElementById("stage").classList.add("detail");
+  document.getElementById("panel").scrollTop=0;
+  zoomTo(c);
   return d3.json("data/"+c+".json").then(function(d){
     D=d;site.lat=d.lat;site.lon=d.lon;
     var log=sub("chat-log");
@@ -1508,7 +1667,21 @@ function load(c){
   });
 }
 
+function deselect(){
+  code=null;
+  document.getElementById("stage").classList.remove("detail");
+  d3.selectAll("#lands path.data").classed("sel",false);
+  d3.selectAll(".cpick-row").classed("on",false);
+  document.getElementById("cpick-name").textContent="Select market";
+  document.getElementById("cpick-flag").style.backgroundImage="";
+  try{localStorage.removeItem("gt-country");}catch(e){}
+  resetZoom();
+}
+
 /* ================= boot ================= */
+document.getElementById("back").addEventListener("click",deselect);
+document.getElementById("layers").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(b)setLayer(b.dataset.l);});
 document.getElementById("btn-theme").addEventListener("click",function(){
   setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");});
 document.getElementById("btn-settings").addEventListener("click",function(){
@@ -1535,6 +1708,7 @@ document.getElementById("btn-settings").addEventListener("click",function(){
     '<li>Nothing here is financial advice.</li></ul>';
   openModal();});
 document.getElementById("btn-explain").addEventListener("click",function(){
+  if(!D)return;
   document.getElementById("modal-t").textContent="Explain prediction";
   renderExplain();openModal();});
 document.getElementById("modal-x").addEventListener("click",closeModal);
@@ -1546,6 +1720,8 @@ document.addEventListener("keydown",function(e){
 
 document.getElementById("btn-chat").addEventListener("click",function(){
   document.getElementById("chat").classList.add("on");
+  if(!D)chatSay("Pick a country on the map first — I answer from one market's "+
+    "own numbers, so I need to know which one.");
   document.getElementById("chat-q").focus();});
 document.getElementById("chat-x").addEventListener("click",function(){
   document.getElementById("chat").classList.remove("on");});
@@ -1553,6 +1729,7 @@ document.getElementById("chat-in").addEventListener("submit",function(e){
   e.preventDefault();
   var q=document.getElementById("chat-q").value.trim();
   if(!q)return;
+  if(!D){chatSay("Pick a country on the map first.");return;}
   chatSay(esc(q),"u");
   document.getElementById("chat-q").value="";
   setTimeout(function(){chatSay(chatAnswer(q)+'<span class="n">Computed from '+
@@ -1581,7 +1758,7 @@ document.getElementById("ptabs").addEventListener("click",function(e){
 document.getElementById("mtabs").addEventListener("click",function(e){
   var b=e.target.closest("button");if(!b)return;
   metric=b.dataset.m;
-  d3.selectAll("#mtabs button").attr("aria-selected",function(){return String(this===b);});
+  d3.selectAll("#mtabs button").attr("aria-pressed",function(){return String(this===b);});
   paintMap();});
 document.getElementById("cap-toggle").addEventListener("click",function(){
   var b=document.getElementById("cap-body"),on=b.style.display==="none";
@@ -1595,9 +1772,10 @@ Promise.all([
   d3.json("data/countries.json"),
   d3.json("data/flows.json").catch(function(){return null;}),
   d3.json("data/solar_grid.json").catch(function(){return null;}),
-  d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+  d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"),
+  d3.json("data/landmarks.json").catch(function(){return null;})
 ]).then(function(res){
-  FLOWS=res[1];SOLAR=res[2];
+  FLOWS=res[1];SOLAR=res[2];LANDMARKS=res[4];
   res[0].countries.forEach(function(c){IDX[c.code]=c;byName[c.name_en]=c.code;});
   var ALIAS={"Czech Republic":"cz","Czechia":"cz","Republic of Serbia":"rs",
              "Bosnia and Herz.":"ba","North Macedonia":"mk"};
@@ -1616,6 +1794,7 @@ Promise.all([
   var lands=vp.append("g").attr("id","lands");
   var flowG=vp.append("g").attr("id","flows");
   var flagG=vp.append("g").attr("id","flags");
+  markerG=vp.append("g").attr("id","markers");
   var tip=document.getElementById("maptip"),wrap=document.getElementById("mapwrap");
 
   lands.selectAll("path").data(feats).join("path")
@@ -1657,13 +1836,14 @@ Promise.all([
   document.getElementById("sources").textContent=
     "Generation, price, carbon and cross-border flows: Energy-Charts (Fraunhofer ISE). "+
     "Weather: Open-Meteo. Solar yield: PVGIS (EU JRC). Charging points: OpenStreetMap (ODbL). "+
-    "Headlines: Google News. All forecasts, signals and scores are this project's own models — "+
-    "not investment advice.";
+    "Headlines: Google News. Landmarks and power stations: OpenStreetMap (ODbL). "+
+    "All forecasts, signals and scores are this project's own models — not investment advice.";
 
-  var start="de";
-  try{var s=localStorage.getItem("gt-country");if(s&&IDX[s])start=s;}catch(e){}
-  if(!IDX[start])start=Object.keys(IDX)[0];
-  return load(start);
+  setLayer("landmarks");
+  // The map is the landing page: it opens whole, with no country chosen. A
+  // previous selection is NOT restored, because reopening straight into a split
+  // panel would hide the thing the page is actually about.
+  drawMarkers();
 }).then(function(){
   setTheme(document.documentElement.getAttribute("data-theme"));
   document.getElementById("boot").classList.add("gone");
