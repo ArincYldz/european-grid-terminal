@@ -171,4 +171,6 @@ python tests/test_price_models.py
 python tests/test_decision.py
 python tests/test_conformal.py
 python tests/test_storage_transform.py
+python tests/test_extras.py       # flow reconciliation, capture rates
+python tests/test_explain.py      # SHAP additivity, similar days, invalidators
 ```
