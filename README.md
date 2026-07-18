@@ -89,7 +89,22 @@ asset calculators alongside.
   reconciled Europe-wide interconnector network.
 - `webapp/build_solar_grid.py` — one-off. PVGIS yield lattice over Europe.
 - `webapp/build_ev_cache.py` — weekly. EV charger counts from OpenStreetMap.
+- `webapp/build_news_cache.py` — every 6 h. Headlines from Google News RSS.
 - `webapp/site/` — fully static frontend, no build step.
+
+### Explainable predictions
+Every forecast can be opened up. `src/models/explain.py` runs **exact TreeSHAP**
+via LightGBM's `pred_contrib=True` — real Shapley values, not a feature-importance
+proxy, and not a sampled approximation. `tests/test_explain.py` asserts the
+property that makes them meaningful: `base + Σcontributions == the model's own
+output`. If that additivity ever broke, the bars would still render while
+telling the user something untrue, so it is pinned in CI.
+
+The "Explain prediction" panel shows the top 5 drivers with signed EUR/MWh
+effects and shares, the conformal confidence interval with its measured
+coverage, the most similar historical hours (nearest neighbours in the model's
+own feature space, with what price actually did then), and what would
+invalidate the forecast.
 
 Local run:
 ```bash
@@ -107,6 +122,7 @@ python -m http.server 8942 --directory webapp/site
 | Open-Meteo | wind @100m, irradiance, temperature — forecast + archive | no key; **sends CORS**, so the wind calculator calls it live from the browser |
 | PVGIS 5.2 (EU JRC) | solar yield climatology (SARAH2 satellite) | no key, no CORS → baked into a lattice once; it never changes |
 | OpenStreetMap / Overpass | public EV charging points | ODbL; ~35 s/country and rate-limited → cached weekly, stale values kept on failure |
+| Google News RSS | market headlines | keyless, no CORS; throttles after ~9 country queries → cached, paced, stale kept |
 
 Rejected during the survey (they now gate access behind a key): OpenChargeMap
 (403), Ember (403), Electricity Maps (401, and its free tier covers one zone).

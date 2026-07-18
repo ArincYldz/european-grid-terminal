@@ -1,343 +1,607 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>European Grid — live power forecasts</title>
-<meta name="description" content="Click any European country for live electricity price, carbon and generation forecasts, plus solar, wind and EV charging tools.">
+<title>European Grid Terminal</title>
+<meta name="description" content="Electricity price, carbon and generation forecasts for 28 European markets, with explainable AI predictions and asset calculators.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Barlow is a DIN-lineage grotesque. DIN is the lettering of European
-     electrical engineering drawings and substation signage — the subject's own
-     vernacular. Plex Mono carries the instrument readouts. -->
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Barlow is DIN-lineage: DIN is the lettering of European electrical
+     engineering drawings and substation signage. Plex Mono carries every
+     number, the way a trading terminal does. -->
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+/* ============================ tokens ============================ */
 :root{
-  --ink:#131A20; --ink-2:#39434C; --zinc:#6E7A86; --line:#D6DBDF;
-  --paper:#F4F5F3; --panel:#FFFFFF;
-  --water:#AECDE3; --land:#E7E8E5; --land-data:#D7DCE0;
-  --copper:#A8481A; --copper-2:#C86A3A; --copper-wash:#F4E6DE;
-  --wind:#3D7EC4; --solar:#E0A32E; --carbon:#5A6570;
-  --sell:#1F6F4A; --store:#2C5F8A; --discharge:#7A4E9B; --curtail:#9B2C2C; --hold:#8A929A;
-  --pos:#1F6F4A; --neg:#9B2C2C;
+  --bg:#0B0E13; --bg-2:#12161D; --card:#151A22; --card-2:#1B212B;
+  --line:#232B36; --line-2:#2E3846;
+  --ink:#E6EAF0; --ink-2:#A0AAB8; --ink-3:#6B7686;
+  --pos:#22C55E; --pos-dim:#16351F;
+  --neg:#EF4444; --neg-dim:#3A1B1B;
+  --info:#3B82F6; --info-dim:#16273F;
+  --warn:#F59E0B; --warn-dim:#3A2A0E;
+  --accent:#C2683A; --accent-2:#E0834F; --accent-dim:#2E1C12;
+  --solar:#F0B429; --wind:#3B82F6; --carbon:#8B98A9; --hydro:#06B6D4;
+  --water:#1A2735; --land:#1E242E; --land-2:#262E3A;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -8px rgba(0,0,0,.5);
   --display:"Barlow Condensed",sans-serif;
   --body:"Barlow",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,monospace;
-  --dur:.72s; --ease:cubic-bezier(.65,.02,.24,1);
+  --r:10px; --r-sm:6px;
+  --pad:18px;
+}
+html[data-theme=light]{
+  --bg:#F6F7F9; --bg-2:#FFFFFF; --card:#FFFFFF; --card-2:#F3F5F7;
+  --line:#E2E6EB; --line-2:#CFD6DE;
+  --ink:#0F141A; --ink-2:#4A5563; --ink-3:#7C8798;
+  --pos:#15803D; --pos-dim:#E4F5EA;
+  --neg:#B91C1C; --neg-dim:#FBE9E9;
+  --info:#1D4ED8; --info-dim:#E6EDFB;
+  --warn:#B45309; --warn-dim:#FDF1DF;
+  --accent:#A8481A; --accent-2:#C86A3A; --accent-dim:#F6E9E1;
+  --solar:#D99311; --wind:#2563EB; --carbon:#5C6878; --hydro:#0891B2;
+  --water:#AECDE3; --land:#E7E8E5; --land-2:#D7DCE0;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 8px 20px -10px rgba(16,24,40,.15);
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);
-  font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;overflow:hidden}
-h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;margin:0}
-:focus-visible{outline:2.5px solid var(--copper);outline-offset:2px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--display);font-weight:700;letter-spacing:.01em;margin:0}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+a{color:var(--info);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;border-radius:3px}
+::selection{background:var(--accent);color:#fff}
 
-#stage{position:fixed;inset:0;overflow:hidden}
-#map-wrap{position:absolute;inset:0;background:var(--water);
-  transition:right var(--dur) var(--ease);will-change:right}
-#stage.detail #map-wrap{right:56%}
+/* ============================ nav ============================ */
+#nav{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;
+  padding:0 20px;height:56px;background:color-mix(in srgb,var(--bg-2) 88%,transparent);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;font-family:var(--display);
+  font-size:17px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-2);
+  box-shadow:0 0 0 3px var(--accent-dim)}
+.nav-sp{flex:1}
+.ctrl{display:flex;align-items:center;gap:6px;height:34px;padding:0 11px;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);
+  font-size:13px;color:var(--ink-2);transition:.15s;white-space:nowrap}
+.ctrl:hover{border-color:var(--line-2);color:var(--ink)}
+.ctrl.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.ctrl.primary:hover{background:var(--accent-2)}
+#cpick{position:relative}
+#cpick-btn{min-width:190px;justify-content:space-between;color:var(--ink);font-weight:600}
+#cpick-menu{position:absolute;top:40px;left:0;width:290px;max-height:60vh;overflow-y:auto;
+  background:var(--card);border:1px solid var(--line-2);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:6px;display:none;z-index:70}
+#cpick.open #cpick-menu{display:block}
+#cpick-search{width:100%;padding:8px 10px;margin-bottom:4px;border:1px solid var(--line);
+  border-radius:var(--r-sm);background:var(--bg);color:var(--ink);font-size:13px}
+.cpick-row{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:var(--r-sm);
+  cursor:pointer;font-size:13.5px}
+.cpick-row:hover,.cpick-row.on{background:var(--card-2)}
+.cpick-row .fl{width:20px;height:14px;flex:none;background-size:cover;border-radius:2px}
+.cpick-row .pr{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.date{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);white-space:nowrap}
+
+/* ============================ layout ============================ */
+main{max-width:1560px;margin:0 auto;padding:22px 20px 90px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}
+.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.stack{margin-top:16px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:var(--pad);box-shadow:var(--shadow);position:relative}
+.card.flat{box-shadow:none}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-h h3{font-size:13px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-2)}
+.card-h .sp{flex:1}
+.card-h .sub{font-size:11.5px;color:var(--ink-3)}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;
+  font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  font-family:var(--display)}
+.tag.pos{background:var(--pos-dim);color:var(--pos)}
+.tag.neg{background:var(--neg-dim);color:var(--neg)}
+.tag.info{background:var(--info-dim);color:var(--info)}
+.tag.warn{background:var(--warn-dim);color:var(--warn)}
+.tag.mute{background:var(--card-2);color:var(--ink-3)}
+
+/* ============================ KPI ============================ */
+.kpi{display:flex;flex-direction:column;gap:9px;min-height:118px}
+.kpi .lab{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3)}
+.kpi .val{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1;
+  letter-spacing:-.02em;display:flex;align-items:baseline;gap:6px}
+.kpi .val small{font-size:13px;font-weight:400;color:var(--ink-3);letter-spacing:0}
+.kpi .foot{display:flex;align-items:center;gap:8px;margin-top:auto}
+.kpi .delta{font-family:var(--mono);font-size:12px;font-weight:500;display:flex;
+  align-items:center;gap:3px}
+.kpi .delta.up{color:var(--pos)}.kpi .delta.down{color:var(--neg)}
+.kpi .delta.flat{color:var(--ink-3)}
+.kpi .spark{margin-left:auto;opacity:.9}
+.kpi .ctx{font-size:11px;color:var(--ink-3)}
+
+/* ============================ insight ============================ */
+.headline{font-family:var(--display);font-size:21px;font-weight:600;line-height:1.22;
+  margin-bottom:14px;letter-spacing:.005em}
+.gauge{display:flex;align-items:center;gap:14px;padding:13px 0;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:13px}
+.gauge .big{font-family:var(--mono);font-size:34px;font-weight:600;line-height:1}
+.gauge .meta{flex:1}
+.rec{display:inline-block;padding:5px 13px;border-radius:var(--r-sm);
+  font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase}
+.rec.sb{background:var(--pos);color:#04160B}
+.rec.b{background:var(--pos-dim);color:var(--pos);border:1px solid var(--pos)}
+.rec.h{background:var(--card-2);color:var(--ink-2);border:1px solid var(--line-2)}
+.rec.s{background:var(--warn-dim);color:var(--warn);border:1px solid var(--warn)}
+.rec.ss{background:var(--neg);color:#fff}
+.bar{height:6px;border-radius:3px;background:var(--card-2);overflow:hidden;margin-top:7px}
+.bar i{display:block;height:100%;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+
+.drv{display:flex;flex-direction:column;gap:7px}
+.drv-row{display:flex;align-items:center;gap:9px;font-size:13px}
+.drv-row .ic{width:19px;text-align:center;flex:none;font-size:13px}
+.drv-row .nm{flex:1;color:var(--ink-2)}
+.drv-row .vl{font-family:var(--mono);font-size:12.5px;font-weight:500}
+.drv-row .ar{font-family:var(--mono);font-size:13px;width:16px;text-align:center}
+.up{color:var(--pos)}.down{color:var(--neg)}.flat{color:var(--ink-3)}
+
+/* ============================ charts ============================ */
+.chart{width:100%;height:auto;display:block;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:13px;font-size:11.5px;color:var(--ink-3);margin-bottom:9px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;
+  vertical-align:-1px}
+
+/* ============================ heatmap ============================ */
+.hm{width:100%;overflow-x:auto}
+.hm table{border-collapse:separate;border-spacing:2px;width:100%;min-width:660px}
+.hm th{font-family:var(--display);font-size:10.5px;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-3);text-align:left;padding:0 6px 5px 0;font-weight:600}
+.hm th.hr{text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:0;padding:0 0 5px}
+.hm td.lbl{font-size:11.5px;color:var(--ink-2);white-space:nowrap;padding-right:8px;width:1%}
+.hm td.cell{height:26px;border-radius:3px;cursor:pointer;position:relative;
+  transition:transform .12s,box-shadow .12s}
+.hm td.cell:hover{transform:scale(1.14);box-shadow:0 0 0 1.5px var(--ink);z-index:5}
+.hm td.cell span{display:block;text-align:center;font-family:var(--mono);font-size:9px;
+  line-height:26px;font-weight:600}
+
+/* ============================ flows ============================ */
+.flow-row{display:grid;grid-template-columns:98px 1fr 84px;align-items:center;gap:10px;
+  padding:7px 0;border-bottom:1px solid var(--line)}
+.flow-row:last-child{border-bottom:none}
+.flow-row .nm{font-size:13px;color:var(--ink-2);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.flow-track{position:relative;height:20px}
+.flow-track .mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line-2)}
+.flow-track .fill{position:absolute;top:5px;height:10px;border-radius:2px}
+.flow-track .ar{position:absolute;top:2px;font-family:var(--mono);font-size:13px;font-weight:700}
+.flow-row .gw{text-align:right;font-family:var(--mono);font-size:12.5px}
+
+/* ============================ tabs ============================ */
+.tabs{display:flex;gap:2px;margin-bottom:14px;background:var(--card-2);padding:3px;
+  border-radius:var(--r-sm);width:fit-content}
+.tabs button{padding:6px 14px;border-radius:4px;font-size:12.5px;font-weight:500;
+  color:var(--ink-3);transition:.15s;font-family:var(--display);letter-spacing:.05em;
+  text-transform:uppercase}
+.tabs button[aria-selected=true]{background:var(--card);color:var(--ink);
+  box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.pane{display:none}.pane.on{display:block}
+
+.fields{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:14px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3)}
+.f input{width:110px;padding:7px 9px;border:1px solid var(--line);border-radius:var(--r-sm);
+  background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13px}
+.f input:focus{border-color:var(--accent-2);outline:none}
+.hint{font-size:11.5px;color:var(--ink-3);padding-bottom:7px}
+.hint b{color:var(--accent-2);font-family:var(--mono);font-weight:500}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:11px}
+.stat{background:var(--card-2);border-radius:var(--r-sm);padding:11px 12px}
+.stat .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3)}
+.stat .v{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:3px;line-height:1.1}
+.stat .d{font-size:10.5px;color:var(--ink-3);margin-top:3px;line-height:1.35}
+.advice{margin-top:12px;padding:11px 13px;background:var(--info-dim);
+  border-left:3px solid var(--info);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:12.5px}
+.advice b{color:var(--ink)}
+
+/* ============================ news ============================ */
+.news{display:flex;flex-direction:column}
+.news a.item{display:block;padding:11px 0;border-bottom:1px solid var(--line);
+  color:var(--ink);text-decoration:none;transition:.15s}
+.news a.item:last-child{border-bottom:none}
+.news a.item:hover{color:var(--accent-2)}
+.news .t{font-size:13px;line-height:1.4;margin-bottom:5px}
+.news .m{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-3)}
+
+/* ============================ map ============================ */
+#mapcard{padding:0;overflow:hidden}
+#map-head{display:flex;align-items:center;gap:10px;padding:14px var(--pad)}
+#mapwrap{position:relative;background:var(--water);height:470px}
 #map{width:100%;height:100%;display:block}
-#viewport{transition:transform var(--dur) var(--ease)}
-
-.land{fill:var(--land);stroke:#FFF;stroke-width:.6;vector-effect:non-scaling-stroke}
-.land.data{fill:var(--land-data);cursor:pointer;transition:fill .18s}
-.land.data:hover{fill:var(--copper-wash)}
-.land.sel{fill:var(--copper-wash);stroke:var(--copper);stroke-width:1.6}
-#stage.detail .land.data:not(.sel){opacity:.45}
-
-/* Signature: continental Europe is ONE synchronised machine. These are the
-   real physical flows circulating through it, speed encoding magnitude. */
-#flows{pointer-events:none}
-.flow{fill:none;stroke:var(--copper);stroke-linecap:round;opacity:.45}
-.flow-dash{fill:none;stroke:var(--copper);stroke-linecap:round;animation:drift linear infinite}
+.land{fill:var(--land);stroke:var(--bg);stroke-width:.5;vector-effect:non-scaling-stroke}
+.land.data{fill:var(--land-2);cursor:pointer;transition:fill .2s}
+.land.data:hover{fill:var(--accent-dim)}
+.land.sel{stroke:var(--accent-2);stroke-width:1.8}
+.flag-bg{fill:var(--bg-2);stroke:var(--line-2);stroke-width:.5;vector-effect:non-scaling-stroke}
+.leader{stroke:var(--ink-3);stroke-width:.7;opacity:.6;vector-effect:non-scaling-stroke}
+.flow{fill:none;stroke:var(--accent-2);stroke-linecap:round;opacity:.4}
+.flow-dash{fill:none;stroke:var(--accent-2);stroke-linecap:round;animation:drift linear infinite}
 @keyframes drift{to{stroke-dashoffset:-42}}
-#stage.detail #flows{opacity:0;transition:opacity .3s}
+#maptip{position:absolute;z-index:9;display:none;pointer-events:none;background:var(--bg-2);
+  border:1px solid var(--line-2);color:var(--ink);padding:8px 11px;border-radius:var(--r-sm);
+  font-size:12px;box-shadow:var(--shadow);max-width:230px}
+#maptip .n{font-family:var(--display);font-weight:600;font-size:13.5px;display:flex;
+  align-items:center;gap:6px;margin-bottom:3px}
+#maptip .v{font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+.fi{width:18px;height:13px;display:inline-block;flex:none;border-radius:2px;background-size:cover}
+#maplegend{position:absolute;left:14px;bottom:14px;background:color-mix(in srgb,var(--bg-2) 92%,transparent);
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 11px;font-size:11px;
+  color:var(--ink-3);backdrop-filter:blur(6px)}
+#maplegend .row{display:flex;align-items:center;gap:6px;margin-top:4px}
+#maplegend .sw{width:14px;height:9px;border-radius:2px;flex:none}
 
-#flags{transition:opacity .3s}
-#stage.detail #flags{opacity:0;pointer-events:none}
-.leader{stroke:var(--ink-2);stroke-width:.7;opacity:.5;vector-effect:non-scaling-stroke}
-.flag-bg{fill:#FFF;stroke:var(--ink-2);stroke-width:.5;vector-effect:non-scaling-stroke}
+/* ============================ modal / drawer ============================ */
+.scrim{position:fixed;inset:0;background:rgba(4,7,11,.66);backdrop-filter:blur(3px);
+  z-index:90;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.on{opacity:1;pointer-events:auto}
+#modal{position:fixed;z-index:95;left:50%;top:50%;transform:translate(-50%,-46%) scale(.97);
+  width:min(760px,94vw);max-height:88vh;overflow-y:auto;background:var(--card);
+  border:1px solid var(--line-2);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6);
+  padding:24px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+#modal.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.modal-h{display:flex;align-items:flex-start;gap:12px;margin-bottom:6px}
+.modal-h h2{font-size:23px;text-transform:uppercase;letter-spacing:.03em}
+.close{margin-left:auto;width:30px;height:30px;border-radius:var(--r-sm);color:var(--ink-3);
+  font-size:19px;line-height:1;display:flex;align-items:center;justify-content:center}
+.close:hover{background:var(--card-2);color:var(--ink)}
+.shap{display:flex;flex-direction:column;gap:9px;margin:6px 0 4px}
+.shap-row{display:grid;grid-template-columns:1fr 190px 78px;align-items:center;gap:11px;
+  font-size:12.5px}
+.shap-row .nm{color:var(--ink-2);text-align:right}
+.shap-bar{position:relative;height:19px;background:var(--card-2);border-radius:3px}
+.shap-bar .mid{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line-2)}
+.shap-bar i{position:absolute;top:3px;height:13px;border-radius:2px}
+.shap-row .vl{font-family:var(--mono);font-size:12px}
+.sec-t{font-family:var(--display);font-size:12px;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--ink-3);margin:20px 0 9px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.mlist{margin:0;padding-left:17px;font-size:12.5px;color:var(--ink-2);line-height:1.6}
+.mlist li{margin-bottom:5px}
+.simrow{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:12.5px;
+  border-bottom:1px solid var(--line)}
+.simrow:last-child{border-bottom:none}
+.simrow .dt{font-family:var(--mono);color:var(--ink-2)}
+.simrow .pz{margin-left:auto;font-family:var(--mono);font-weight:600}
 
-.brand{position:absolute;top:22px;left:24px;z-index:5;pointer-events:none;
-  transition:opacity .25s}
-.brand h1{font-size:30px;line-height:.95;text-transform:uppercase;letter-spacing:.02em}
-.brand .bar{width:38px;height:4px;background:var(--copper);margin:7px 0 6px}
-.brand p{margin:0;font-size:12.5px;color:var(--ink-2);max-width:292px}
-#stage.detail .brand{opacity:0}
+#chat{position:fixed;top:0;right:0;bottom:0;width:min(408px,94vw);background:var(--bg-2);
+  border-left:1px solid var(--line-2);z-index:96;display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);
+  box-shadow:-16px 0 50px rgba(0,0,0,.4)}
+#chat.on{transform:translateX(0)}
+#chat-h{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line)}
+#chat-log{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:13px}
+.msg{max-width:92%;padding:11px 13px;border-radius:11px;font-size:13px;line-height:1.5}
+.msg.a{background:var(--card);border:1px solid var(--line);align-self:flex-start;
+  border-bottom-left-radius:3px}
+.msg.u{background:var(--accent);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+.msg b{font-weight:600}
+.msg .n{display:block;margin-top:8px;font-size:11px;color:var(--ink-3)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 18px 12px}
+.chip{padding:6px 11px;border:1px solid var(--line-2);border-radius:999px;font-size:12px;
+  color:var(--ink-2);transition:.15s}
+.chip:hover{border-color:var(--accent-2);color:var(--ink)}
+#chat-in{display:flex;gap:8px;padding:13px 18px;border-top:1px solid var(--line)}
+#chat-in input{flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-sm);
+  background:var(--bg);color:var(--ink);font-size:13px}
+#chat-in input:focus{border-color:var(--accent-2);outline:none}
 
-#controls{position:absolute;left:24px;bottom:22px;z-index:5;max-width:252px;
-  background:rgba(255,255,255,.93);border:1px solid var(--line);border-radius:3px;
-  padding:11px 13px;backdrop-filter:blur(6px);transition:opacity .25s}
-#stage.detail #controls{opacity:0;pointer-events:none}
-#controls .lab{font-family:var(--display);font-size:11px;font-weight:600;
-  text-transform:uppercase;letter-spacing:.1em;color:var(--zinc);margin-bottom:7px}
-.seg{display:flex;flex-wrap:wrap;gap:3px}
-.seg button{padding:4px 8px;font-size:12px;border:1px solid var(--line);
-  border-radius:2px;background:#FFF;color:var(--ink-2);transition:.15s}
-.seg button:hover{border-color:var(--copper-2)}
-.seg button[aria-pressed=true]{background:var(--ink);color:#FFF;border-color:var(--ink)}
-#legend{margin-top:9px;font-size:11px;color:var(--zinc)}
-#legend .row{display:flex;align-items:center;gap:5px;margin-top:4px}
-#legend .sw{width:13px;height:9px;border:1px solid rgba(0,0,0,.15);flex:none}
+.disclosure{font-size:11px;color:var(--ink-3);line-height:1.5;margin-top:10px;
+  padding:9px 11px;background:var(--card-2);border-radius:var(--r-sm)}
+.empty{padding:26px 14px;text-align:center;color:var(--ink-3);font-size:12.5px}
+#boot{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;align-items:center;
+  justify-content:center;font-family:var(--display);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-3);font-size:13px;transition:opacity .3s}
+#boot.gone{opacity:0;pointer-events:none}
 
-#hint{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);z-index:5;
-  font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.06em;
-  text-transform:uppercase;color:var(--ink-2);background:rgba(255,255,255,.9);
-  padding:6px 14px;border-radius:2px;border:1px solid var(--line);white-space:nowrap;
-  transition:opacity .25s}
-#stage.detail #hint,#hint.gone{opacity:0;pointer-events:none}
-
-#maptip{position:absolute;z-index:9;display:none;pointer-events:none;
-  background:var(--ink);color:#FFF;padding:7px 10px;border-radius:3px;
-  font-size:12px;max-width:225px;box-shadow:0 4px 14px rgba(0,0,0,.22)}
-#maptip .n{font-family:var(--display);font-weight:600;font-size:14px;
-  display:flex;align-items:center;gap:6px}
-#maptip .v{color:#C6CDD4;margin-top:2px;font-size:11.5px;font-family:var(--mono)}
-.fi{width:17px;height:12px;display:inline-block;flex:none;border:.5px solid rgba(255,255,255,.35)}
-
-#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  background:var(--water);z-index:20;font-family:var(--display);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--ink-2);font-size:13px}
-
-#detail{position:absolute;top:0;right:0;bottom:0;width:56%;background:var(--panel);
-  border-left:1px solid var(--line);overflow-y:auto;z-index:6;
-  transform:translateX(100%);transition:transform var(--dur) var(--ease);will-change:transform}
-#stage.detail #detail{transform:translateX(0)}
-.d-in{padding:20px 26px 60px;opacity:0;transition:opacity .3s .3s}
-#stage.detail .d-in{opacity:1}
-
-#back{display:inline-flex;align-items:center;gap:6px;font-family:var(--display);
-  font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--zinc);padding:5px 0;margin-bottom:12px}
-#back:hover{color:var(--copper)}
-
-.d-head{display:flex;align-items:center;gap:12px;padding-bottom:14px;
-  border-bottom:2px solid var(--ink)}
-.d-head .fl{width:44px;height:31px;flex:none;border:1px solid var(--line);
-  background-size:cover;background-position:center}
-.d-head h2{font-size:31px;line-height:1;text-transform:uppercase}
-.d-head .meta{font-size:11.5px;color:var(--zinc);margin-top:1px}
-
-/* Sections follow the content's real certainty gradient:
-   measured -> forecast -> what it means for you -> structure -> track record. */
-section{margin-top:24px}
-.s-head{display:flex;align-items:baseline;gap:9px;margin-bottom:11px}
-.s-head h3{font-size:14px;text-transform:uppercase;letter-spacing:.12em}
-.s-head .sub{font-size:11.5px;color:var(--zinc)}
-.s-head::after{content:"";flex:1;height:1px;background:var(--line)}
-
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
-.kpi{border:1px solid var(--line);border-radius:3px;padding:9px 10px;background:var(--paper)}
-.kpi .k{font-size:10.5px;color:var(--zinc);text-transform:uppercase;letter-spacing:.07em}
-.kpi .v{font-family:var(--mono);font-size:19px;font-weight:500;margin-top:3px;line-height:1.1}
-.kpi .u{font-size:11px;color:var(--zinc)}
-
-.chart{width:100%;height:auto;display:block}
-.cwrap{margin-top:13px}
-.ctitle{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.08em;
-  text-transform:uppercase;color:var(--ink-2);margin-bottom:4px}
-.ckey{font-size:11px;color:var(--zinc);margin-bottom:5px}
-.ckey i{display:inline-block;width:9px;height:9px;margin-right:3px;vertical-align:-1px}
-
-.cred{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
-.cc{border:1px solid var(--line);border-radius:3px;padding:9px 10px}
-.cc .k{font-size:10.5px;color:var(--zinc);text-transform:uppercase;letter-spacing:.07em}
-.cc .v{font-family:var(--mono);font-size:17px;font-weight:500;margin-top:2px}
-.cc .d{font-size:10.5px;color:var(--zinc);margin-top:2px;line-height:1.3}
-
-.flows-list{display:flex;flex-direction:column;gap:4px}
-.fl-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
-.fl-row .nm{width:112px;flex:none;color:var(--ink-2)}
-.fl-row .track{flex:1;height:9px;background:var(--paper);border:1px solid var(--line);
-  position:relative;border-radius:1px}
-.fl-row .fill{position:absolute;top:0;bottom:0}
-.fl-row .mid{position:absolute;top:-2px;bottom:-2px;left:50%;width:1px;background:var(--zinc)}
-.fl-row .gw{width:76px;flex:none;text-align:right;font-family:var(--mono);font-size:11.5px}
-
-.tabs{display:flex;gap:3px;margin-bottom:11px;border-bottom:1px solid var(--line)}
-.tabs button{padding:6px 13px;font-family:var(--display);font-size:12.5px;font-weight:600;
-  letter-spacing:.07em;text-transform:uppercase;color:var(--zinc);
-  border-bottom:2px solid transparent;margin-bottom:-1px}
-.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--copper)}
-.tool{display:none}
-.tool.on{display:block}
-.fields{display:flex;flex-wrap:wrap;gap:11px;align-items:flex-end;margin-bottom:11px}
-.f{display:flex;flex-direction:column;gap:3px}
-.f label{font-size:10.5px;color:var(--zinc);text-transform:uppercase;letter-spacing:.07em}
-.f input{width:96px;padding:5px 7px;border:1px solid var(--line);border-radius:2px;
-  font-family:var(--mono);font-size:13px;background:#FFF;color:var(--ink)}
-.f input:focus{border-color:var(--copper);outline:none}
-.pick{font-size:11.5px;color:var(--zinc);padding-bottom:5px}
-.pick b{color:var(--copper);font-family:var(--mono);font-weight:500}
-
-.out{border:1px solid var(--line);border-left:3px solid var(--copper);
-  border-radius:2px;padding:11px 13px;background:var(--paper)}
-.out .big{font-family:var(--mono);font-size:25px;font-weight:500;line-height:1.1}
-.out .lab{font-size:11px;color:var(--zinc);text-transform:uppercase;letter-spacing:.07em}
-.out .split{display:grid;grid-template-columns:1fr 1fr;gap:13px}
-.out p{margin:8px 0 0;font-size:12px;color:var(--ink-2);line-height:1.45}
-.note{font-size:11px;color:var(--zinc);margin-top:7px;line-height:1.4}
-.err{color:var(--curtail);font-size:12px}
-
-.sig-hint{font-size:11.5px;color:var(--zinc);margin-top:5px;min-height:17px}
-.pill{display:inline-block;padding:1px 6px;border-radius:2px;font-size:10.5px;
-  font-family:var(--display);font-weight:600;letter-spacing:.05em;color:#FFF}
-
-@media (max-width:900px){
-  body{overflow:auto}
-  #stage{position:relative;inset:auto;height:auto}
-  #map-wrap{position:relative;inset:auto;height:56vh}
-  #stage.detail #map-wrap{right:0}
-  #detail{position:relative;width:100%;transform:none;border-left:none;
-    border-top:2px solid var(--ink);display:none}
-  #stage.detail #detail{display:block}
-  .d-in{opacity:1}
-  .kpis,.cred{grid-template-columns:repeat(2,1fr)}
-  .out .split{grid-template-columns:1fr}
-  .brand h1{font-size:23px}
+/* ============================ responsive ============================ */
+@media (max-width:1200px){
+  .c8,.c7{grid-column:span 12}.c4,.c5{grid-column:span 12}
+  .c6{grid-column:span 12}.c3{grid-column:span 6}
+}
+@media (max-width:720px){
+  main{padding:16px 13px 80px}
+  .grid{gap:12px}
+  .c3{grid-column:span 12}
+  #nav{gap:9px;padding:0 13px}
+  .date,.ctrl.hide-sm{display:none}
+  #cpick-btn{min-width:130px}
+  .kpi .val{font-size:25px}
+  .shap-row{grid-template-columns:1fr 96px 64px;gap:7px;font-size:11.5px}
 }
 @media (prefers-reduced-motion:reduce){
-  *{transition:none!important}
-  .flow-dash{animation:none;stroke-dasharray:none;opacity:.5}
+  *{transition:none!important;animation:none!important}
 }
 </style>
 </head>
 <body>
-<div id="stage">
-  <div id="map-wrap">
-    <svg id="map" viewBox="0 0 1000 720" preserveAspectRatio="xMidYMid meet" role="img"
-         aria-label="Map of Europe. Select a country to open its electricity forecasts."></svg>
 
-    <div class="brand">
-      <h1>European<br>Grid</h1>
-      <div class="bar"></div>
-      <p>One synchronised machine, 28 markets. Live price, carbon and generation
-         forecasts — and what they mean for your panels, turbine or car.</p>
+<div id="boot">Loading markets…</div>
+
+<nav id="nav">
+  <div class="brand"><span class="dot"></span>Grid Terminal</div>
+
+  <div id="cpick">
+    <button class="ctrl" id="cpick-btn" aria-haspopup="listbox" aria-expanded="false">
+      <span style="display:flex;align-items:center;gap:8px">
+        <span class="fi" id="cpick-flag"></span><span id="cpick-name">Select market</span>
+      </span>
+      <span style="color:var(--ink-3);font-size:10px">▼</span>
+    </button>
+    <div id="cpick-menu" role="listbox">
+      <input id="cpick-search" placeholder="Search markets…" aria-label="Search markets">
+      <div id="cpick-list"></div>
     </div>
-
-    <div id="controls">
-      <div class="lab">Shade countries by</div>
-      <div class="seg" id="seg" role="group" aria-label="Map colouring metric"></div>
-      <div id="legend"></div>
-    </div>
-
-    <div id="hint">Click a country</div>
-    <div id="maptip" role="tooltip"></div>
-    <div id="loading">Loading markets…</div>
   </div>
 
-  <aside id="detail" aria-live="polite">
-    <div class="d-in">
-      <button id="back">‹ Back to map</button>
+  <span class="date" id="navdate"></span>
+  <div class="nav-sp"></div>
 
-      <div class="d-head">
-        <div class="fl" id="d-flag"></div>
+  <button class="ctrl hide-sm" id="btn-theme" title="Toggle light / dark">
+    <span id="theme-ic">☾</span><span id="theme-tx">Dark</span>
+  </button>
+  <button class="ctrl hide-sm" id="btn-settings" title="Settings">⚙ Settings</button>
+  <button class="ctrl primary" id="btn-chat">✨ Ask the data</button>
+</nav>
+
+<main>
+  <!-- ===== HERO KPIs ===== -->
+  <section class="grid" id="kpis" aria-label="Key indicators"></section>
+
+  <!-- ===== FORECAST + INSIGHT ===== -->
+  <section class="grid stack">
+    <div class="card c8">
+      <div class="card-h">
+        <h3>Price forecast — next 24 h</h3><span class="sp"></span>
+        <span class="sub" id="price-sub"></span>
+        <button class="ctrl" id="btn-explain" style="height:29px;padding:0 10px;font-size:12px">
+          ⓘ Explain prediction</button>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>Expected (P50)</span>
+        <span><i style="background:var(--accent-dim)"></i>80% confidence band</span>
+        <span><i style="background:var(--neg)"></i>Negative-price line</span>
+      </div>
+      <svg id="c-price" class="chart" viewBox="0 0 900 300"></svg>
+    </div>
+
+    <div class="card c4">
+      <div class="card-h"><h3>Market insight</h3><span class="sp"></span>
+        <span class="tag mute" id="ins-ver"></span></div>
+      <div class="headline" id="ins-headline">—</div>
+
+      <div class="gauge">
         <div>
-          <h2 id="d-name">—</h2>
-          <div class="meta" id="d-meta"></div>
+          <div class="num big" id="ins-score">—</div>
+          <div style="font-size:10.5px;color:var(--ink-3);text-transform:uppercase;
+                      letter-spacing:.08em">Market score</div>
+        </div>
+        <div class="meta">
+          <div class="rec h" id="ins-rec">—</div>
+          <div class="bar"><i id="ins-bar" style="width:0"></i></div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:6px" id="ins-rationale"></div>
         </div>
       </div>
 
-      <section>
-        <div class="s-head"><h3>Now</h3>
-          <span class="sub">measured — the feed publishes a few hours behind</span></div>
-        <div class="kpis" id="k-now"></div>
-        <div class="cwrap" id="flows-wrap">
-          <div class="ctitle">Power crossing the border</div>
-          <div class="ckey">Mean net physical flow. Left of centre = exporting, right = importing.</div>
-          <div class="flows-list" id="flows-list"></div>
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+        <div style="flex:1">
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+                      color:var(--ink-3)">Forecast confidence</div>
+          <div class="bar"><i id="conf-bar" style="width:0;background:var(--info)"></i></div>
         </div>
-      </section>
+        <div class="num" id="conf-val" style="font-size:17px;font-weight:600">—</div>
+      </div>
 
-      <section>
-        <div class="s-head"><h3>Next 24 hours</h3>
-          <span class="sub">forecast · clock times are yours, not the country's</span></div>
-        <div class="cwrap">
-          <div class="ctitle">Price with uncertainty band</div>
-          <div class="ckey"><i style="background:#F4E6DE"></i>P10–P90 range
-            <i style="background:#A8481A;margin-left:9px"></i>P50 expected</div>
-          <svg id="c-price" class="chart" viewBox="0 0 560 165"></svg>
-        </div>
-        <div class="cwrap">
-          <div class="ctitle">Renewable generation</div>
-          <div class="ckey"><i style="background:#3D7EC4"></i>Wind
-            <i style="background:#E0A32E;margin-left:9px"></i>Solar</div>
-          <svg id="c-gen" class="chart" viewBox="0 0 560 165"></svg>
-        </div>
-        <div class="cwrap" id="carbon-wrap">
-          <div class="ctitle">Grid carbon intensity</div>
-          <div class="ckey">Our own forecast — the feed publishes history only.</div>
-          <svg id="c-carbon" class="chart" viewBox="0 0 560 140"></svg>
-        </div>
-        <div class="cwrap">
-          <div class="ctitle">Trading signal, hour by hour</div>
-          <svg id="c-sig" class="chart" viewBox="0 0 560 58"></svg>
-          <div class="sig-hint" id="sig-hint">Hover a bar for the reasoning.</div>
-        </div>
-      </section>
-
-      <section>
-        <div class="s-head"><h3>Your assets</h3><span class="sub">what this means for you</span></div>
-        <div class="tabs" id="tabs" role="tablist">
-          <button role="tab" data-tool="solar" aria-selected="true">Solar</button>
-          <button role="tab" data-tool="wind" aria-selected="false">Wind</button>
-          <button role="tab" data-tool="ev" aria-selected="false">EV charging</button>
-        </div>
-
-        <div class="tool on" id="t-solar">
-          <div class="fields">
-            <div class="f"><label for="i-kwp">System size (kWp)</label>
-              <input id="i-kwp" type="number" value="10" min="1" max="100000" step="1"></div>
-            <div class="pick">Site: <b id="solar-pt">—</b> · click the map to move it</div>
-          </div>
-          <div class="out" id="o-solar"></div>
-        </div>
-
-        <div class="tool" id="t-wind">
-          <div class="fields">
-            <div class="f"><label for="i-mw">Turbine rating (MW)</label>
-              <input id="i-mw" type="number" value="3" min="0.1" max="20" step="0.1"></div>
-            <div class="pick">Site: <b id="wind-pt">—</b> · click the map to move it</div>
-          </div>
-          <div class="out" id="o-wind"></div>
-          <div class="cwrap"><svg id="c-wind" class="chart" viewBox="0 0 560 140"></svg></div>
-        </div>
-
-        <div class="tool" id="t-ev">
-          <div class="fields">
-            <div class="f"><label for="i-kwh">Battery (kWh)</label>
-              <input id="i-kwh" type="number" value="60" min="1" max="500" step="1"></div>
-            <div class="f"><label for="i-soc">Charge needed (%)</label>
-              <input id="i-soc" type="number" value="70" min="1" max="100" step="1"></div>
-          </div>
-          <div class="out" id="o-ev"></div>
-        </div>
-      </section>
-
-      <section id="grid-sec">
-        <div class="s-head"><h3>Grid build-out</h3><span class="sub">installed capacity</span></div>
-        <div class="ckey" id="cap-key"></div>
-        <svg id="c-cap" class="chart" viewBox="0 0 560 175"></svg>
-      </section>
-
-      <section id="track-sec">
-        <div class="s-head"><h3>Track record</h3><span class="sub">measured out-of-sample</span></div>
-        <div class="cred" id="cred"></div>
-        <div class="cwrap" id="replay-wrap">
-          <div class="ctitle">Forecast vs actual — the last 48 h we held out</div>
-          <div class="ckey">The model never saw these hours during training.
-            <i style="background:#A8481A;margin-left:9px"></i>forecast
-            <i style="background:#131A20;margin-left:9px"></i>actual</div>
-          <svg id="c-rgen" class="chart" viewBox="0 0 560 145"></svg>
-          <svg id="c-rprice" class="chart" viewBox="0 0 560 145" style="margin-top:9px"></svg>
-        </div>
-      </section>
-
-      <p class="note" id="sources"></p>
+      <div class="card-h" style="margin:16px 0 9px"><h3>Key drivers</h3></div>
+      <div class="drv" id="ins-drivers"></div>
+      <div class="disclosure" id="ins-note"></div>
     </div>
-  </aside>
+  </section>
+
+  <!-- ===== RENEWABLES + CARBON ===== -->
+  <section class="grid stack">
+    <div class="card c6">
+      <div class="card-h"><h3>Renewable generation</h3><span class="sp"></span>
+        <span class="sub">forecast, next 24 h</span></div>
+      <div class="legend">
+        <span><i style="background:var(--wind)"></i>Wind</span>
+        <span><i style="background:var(--solar)"></i>Solar</span>
+        <span id="lg-demand"><i style="background:var(--ink-3)"></i>Demand (right axis)</span>
+      </div>
+      <svg id="c-gen" class="chart" viewBox="0 0 640 260"></svg>
+    </div>
+
+    <div class="card c6">
+      <div class="card-h"><h3>Carbon intensity</h3><span class="sp"></span>
+        <span class="sub" id="carbon-sub"></span></div>
+      <svg id="c-carbon" class="chart" viewBox="0 0 640 190"></svg>
+      <div class="stats" style="margin-top:14px">
+        <div class="stat"><div class="k">Cleanest hour</div>
+          <div class="v" id="cln-h">—</div><div class="d" id="cln-v"></div></div>
+        <div class="stat"><div class="k">Band coverage</div>
+          <div class="v" id="cov-v">—</div><div class="d">actual price inside P10–P90</div></div>
+        <div class="stat"><div class="k">Risk level</div>
+          <div class="v" id="risk-v">—</div><div class="d" id="risk-d"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== HEATMAP ===== -->
+  <section class="card stack">
+    <div class="card-h"><h3>Market signals — hour by hour</h3><span class="sp"></span>
+      <span class="sub">hover any cell for detail</span></div>
+    <div class="hm" id="heatmap"></div>
+    <div class="disclosure" id="hm-note">
+      Colour runs from low (dark) to high (bright) within each row's own range, so rows in
+      different units stay comparable. The signal row uses the decision engine's own colours.
+    </div>
+  </section>
+
+  <!-- ===== DRIVERS + FLOWS ===== -->
+  <section class="grid stack">
+    <div class="card c6">
+      <div class="card-h"><h3>Price drivers</h3><span class="sp"></span>
+        <span class="sub">next 24 h vs the day before</span></div>
+      <div class="drv" id="drivers-full"></div>
+    </div>
+    <div class="card c6">
+      <div class="card-h"><h3>Cross-border flows</h3><span class="sp"></span>
+        <span class="sub">mean physical flow</span></div>
+      <div id="flows-list"></div>
+    </div>
+  </section>
+
+  <!-- ===== PORTFOLIO ===== -->
+  <section class="card stack">
+    <div class="card-h"><h3>Your portfolio</h3><span class="sp"></span>
+      <span class="sub">what these forecasts mean for an asset you own</span></div>
+    <div class="tabs" id="ptabs" role="tablist">
+      <button role="tab" data-p="solar" aria-selected="true">Solar</button>
+      <button role="tab" data-p="wind" aria-selected="false">Wind</button>
+      <button role="tab" data-p="battery" aria-selected="false">Battery</button>
+      <button role="tab" data-p="ev" aria-selected="false">EV charging</button>
+    </div>
+
+    <div class="pane on" id="p-solar">
+      <div class="fields">
+        <div class="f"><label for="i-kwp">System size (kWp)</label>
+          <input id="i-kwp" type="number" value="10" min="1" max="100000" step="1"></div>
+        <div class="f"><label for="i-capex">Install cost (€/kWp)</label>
+          <input id="i-capex" type="number" value="1200" min="0" max="10000" step="50"></div>
+        <div class="hint">Site: <b id="solar-pt">—</b> · click the map to move it</div>
+      </div>
+      <div class="stats" id="o-solar"></div>
+      <div class="advice" id="a-solar"></div>
+    </div>
+
+    <div class="pane" id="p-wind">
+      <div class="fields">
+        <div class="f"><label for="i-mw">Turbine rating (MW)</label>
+          <input id="i-mw" type="number" value="3" min="0.1" max="20" step="0.1"></div>
+        <div class="hint">Site: <b id="wind-pt">—</b> · click the map to move it</div>
+      </div>
+      <div class="stats" id="o-wind"></div>
+      <div class="advice" id="a-wind"></div>
+      <svg id="c-wind" class="chart" viewBox="0 0 900 190" style="margin-top:14px"></svg>
+    </div>
+
+    <div class="pane" id="p-battery">
+      <div class="fields">
+        <div class="f"><label for="i-bmwh">Capacity (MWh)</label>
+          <input id="i-bmwh" type="number" value="10" min="0.1" max="1000" step="0.5"></div>
+        <div class="f"><label for="i-beff">Round-trip eff. (%)</label>
+          <input id="i-beff" type="number" value="88" min="50" max="100" step="1"></div>
+      </div>
+      <div class="stats" id="o-batt"></div>
+      <div class="advice" id="a-batt"></div>
+    </div>
+
+    <div class="pane" id="p-ev">
+      <div class="fields">
+        <div class="f"><label for="i-kwh">Battery (kWh)</label>
+          <input id="i-kwh" type="number" value="60" min="1" max="500" step="1"></div>
+        <div class="f"><label for="i-soc">Charge needed (%)</label>
+          <input id="i-soc" type="number" value="70" min="1" max="100" step="1"></div>
+      </div>
+      <div class="stats" id="o-ev"></div>
+      <div class="advice" id="a-ev"></div>
+    </div>
+  </section>
+
+  <!-- ===== QUALITY + NEWS ===== -->
+  <section class="grid stack">
+    <div class="card c6">
+      <div class="card-h"><h3>Forecast quality</h3><span class="sp"></span>
+        <span class="sub">measured out-of-sample</span></div>
+      <div class="stats" id="quality"></div>
+      <div class="card-h" style="margin:18px 0 8px"><h3 style="font-size:12px">
+        Forecast vs actual — 48 h the model never saw</h3></div>
+      <svg id="c-replay" class="chart" viewBox="0 0 640 190"></svg>
+      <div class="disclosure" id="model-meta"></div>
+    </div>
+
+    <div class="card c6">
+      <div class="card-h"><h3>Market news</h3><span class="sp"></span>
+        <span class="sub">Google News</span></div>
+      <div class="news" id="news"></div>
+      <div class="disclosure">
+        Headlines and links come straight from publishers. The impact tag is a simple
+        keyword match on the headline — a rough hint, not analysis, and not an input to
+        any forecast on this page.
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CAPACITY (collapsible) ===== -->
+  <section class="card stack" id="capsec">
+    <div class="card-h"><h3>Grid build-out</h3><span class="sp"></span>
+      <span class="sub" id="cap-key"></span>
+      <button class="ctrl" id="cap-toggle" style="height:28px;font-size:12px">Show</button></div>
+    <div id="cap-body" style="display:none"><svg id="c-cap" class="chart" viewBox="0 0 900 260"></svg></div>
+  </section>
+
+  <!-- ===== MAP ===== -->
+  <section class="card stack" id="mapcard">
+    <div id="map-head">
+      <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-2)">
+        European grid</h3>
+      <span class="sp"></span>
+      <div class="tabs" id="mtabs" style="margin:0">
+        <button data-m="none" aria-selected="true">Plain</button>
+        <button data-m="last_price_eur_mwh" aria-selected="false">Price</button>
+        <button data-m="carbon_now_g_kwh" aria-selected="false">Carbon</button>
+        <button data-m="renewable_share_pct" aria-selected="false">Renewables</button>
+        <button data-m="ev_density" aria-selected="false">EV</button>
+      </div>
+    </div>
+    <div id="mapwrap">
+      <svg id="map" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" role="img"
+           aria-label="Map of Europe. Select a country to load its market."></svg>
+      <div id="maptip" role="tooltip"></div>
+      <div id="maplegend"></div>
+    </div>
+  </section>
+
+  <p class="disclosure" id="sources" style="margin-top:16px"></p>
+</main>
+
+<!-- ===== EXPLAIN MODAL ===== -->
+<div class="scrim" id="scrim"></div>
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-t">
+  <div class="modal-h">
+    <div>
+      <h2 id="modal-t">Explain prediction</h2>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:3px" id="modal-sub"></div>
+    </div>
+    <button class="close" id="modal-x" aria-label="Close">✕</button>
+  </div>
+  <div id="modal-body"></div>
 </div>
+
+<!-- ===== CHAT DRAWER ===== -->
+<aside id="chat" aria-label="Ask the data">
+  <div id="chat-h">
+    <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.11em">Ask the data</h3>
+    <span class="sp" style="flex:1"></span>
+    <button class="close" id="chat-x" aria-label="Close">✕</button>
+  </div>
+  <div id="chat-log"></div>
+  <div class="chips" id="chat-chips"></div>
+  <form id="chat-in"><input id="chat-q" placeholder="Ask anything…" autocomplete="off">
+    <button class="ctrl primary" type="submit">Send</button></form>
+</aside>
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
@@ -345,205 +609,478 @@ section{margin-top:24px}
 (function(){
 "use strict";
 var FLAG="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/";
-var VBW=1000,VBH=720;
-var COUNTRIES={},byName={},featById={},PATH=null,PROJ=null;
-var FLOWS=null,SOLAR=null,metric="none",cur=null,curData=null,tool="solar";
-var site={lat:null,lon:null};
+var VBW=1000,VBH=620;
+var IDX={},FLOWS=null,SOLAR=null,D=null,code=null,metric="none",tool="solar";
+var featById={},byName={},PATH=null,PROJ=null,site={lat:null,lon:null};
 
 var cs=getComputedStyle(document.documentElement);
 function cv(n){return cs.getPropertyValue(n).trim();}
 var NS="http://www.w3.org/2000/svg";
 function el(t,a){var e=document.createElementNS(NS,t);for(var k in a)e.setAttribute(k,a[k]);return e;}
-function txt(x,y,s,f,sz,an){var t=el("text",{x:x,y:y,fill:f||cv("--zinc"),"font-size":sz||10,
+function sub(id){var s=document.getElementById(id);while(s.firstChild)s.removeChild(s.firstChild);return s;}
+function txt(x,y,s,f,sz,an){var t=el("text",{x:x,y:y,fill:f||cv("--ink-3"),"font-size":sz||10,
   "text-anchor":an||"start","font-family":'"IBM Plex Mono",monospace'});t.textContent=s;return t;}
-function clr(id){var s=document.getElementById(id);while(s.firstChild)s.removeChild(s.firstChild);return s;}
-function hourLab(iso){return new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});}
-function fmtT(iso){return new Date(iso).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}
 function num(x,d){return (x==null||!isFinite(x))?"—":
   Number(x).toLocaleString("en-GB",{minimumFractionDigits:d||0,maximumFractionDigits:d||0});}
+function hLab(iso){return new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});}
+function esc(s){var d=document.createElement("div");d.textContent=s==null?"":s;return d.innerHTML;}
 
-/* ================= map colouring ================= */
-/* Every metric here is INTENSIVE — a rate or a density, never a raw count.
-   Shading a country by an absolute total is a cartographic own-goal: Germany
-   would lead the EV map purely for being large. So charger counts are divided
-   by the country's own area, measured off the geometry we already have. */
-var METRICS={
-  none:{label:"None"},
-  last_price_eur_mwh:{label:"Price",unit:"€/MWh",
-    ramp:["#EDE7E2","#DFC3AE","#CE9877","#B96D45","#A8481A"]},
-  carbon_now_g_kwh:{label:"Carbon",unit:"gCO₂/kWh",
-    ramp:["#E8EEE9","#BFD3C4","#94B39F","#68907A","#3E6E56"]},
-  renewable_share_pct:{label:"Renewables",unit:"% of demand",
-    ramp:["#E9EDF2","#C3D3E4","#9BB8D5","#6F9BC5","#3D7EC4"]},
-  ev_density:{label:"EV chargers",unit:"charging points per 1000 km²",
-    ramp:["#EFEAF2","#D6C7E0","#BAA2CC","#9B7BB6","#7A4E9B"],
-    derive:function(c){
-      var n=COUNTRIES[c]&&COUNTRIES[c].kpis.ev_chargers;
-      var a=areaKm2(c);
-      return (n==null||!a)?null:n/(a/1000);
-    }}
-};
-var _area={},FRAME={lon:[-11,34],lat:[34,71]};
-/* Area of the country INSIDE the mapped frame. world-atlas hands back whole
-   sovereign states, so plain geoArea charges France for French Guiana (+17%,
-   measured) and would understate its charger density by the same margin.
-   Counting only the polygons we actually draw keeps the shading consistent
-   with the map. */
-function areaKm2(code){
-  if(_area[code]!==undefined)return _area[code];
-  var f=featById[code];
-  if(!f){_area[code]=null;return null;}
-  var polys=f.geometry.type==="MultiPolygon"
-    ? f.geometry.coordinates.map(function(c){return {type:"Polygon",coordinates:c};})
-    : [f.geometry];
-  var total=0;
-  polys.forEach(function(p){
-    var c=d3.geoCentroid(p);
-    if(c[0]>=FRAME.lon[0]&&c[0]<=FRAME.lon[1]&&c[1]>=FRAME.lat[0]&&c[1]<=FRAME.lat[1])
-      total+=d3.geoArea(p)*6371*6371;
-  });
-  _area[code]=total||null;
-  return _area[code];
+/* ================= theme ================= */
+function setTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  try{localStorage.setItem("gt-theme",t);}catch(e){}
+  document.getElementById("theme-ic").textContent=t==="dark"?"☾":"☀";
+  document.getElementById("theme-tx").textContent=t==="dark"?"Dark":"Light";
+  cs=getComputedStyle(document.documentElement);
+  if(D)renderAll();
+  if(PATH)paintMap();
 }
-function metricVal(c,m){
-  var M=METRICS[m];
-  var v=M.derive?M.derive(c):(COUNTRIES[c]&&COUNTRIES[c].kpis[m]);
-  return (v==null||!isFinite(v))?null:v;
-}
-function metricVals(m){var o=[];for(var c in COUNTRIES){var v=metricVal(c,m);
-  if(v!=null)o.push(v);}return o;}
-function paint(){
-  var sel=d3.select("#lands").selectAll("path.data");
-  var lg=document.getElementById("legend");
-  if(metric==="none"){sel.style("fill",null);lg.innerHTML="";return;}
-  var vals=metricVals(metric);
-  if(vals.length<2){sel.style("fill",null);lg.innerHTML=
-    '<div class="row">No data for this metric yet.</div>';return;}
-  var sc=d3.scaleQuantile().domain(vals).range(METRICS[metric].ramp);
-  sel.style("fill",function(){
-    var v=metricVal(this.getAttribute("data-code"),metric);
-    return v==null?null:sc(v);});
-  var ex=d3.extent(vals),bounds=[ex[0]].concat(sc.quantiles(),[ex[1]]);
-  var dp=ex[1]<10?1:0;   // densities are small numbers; prices are not
-  lg.innerHTML=METRICS[metric].ramp.map(function(col,i){
-    return '<div class="row"><span class="sw" style="background:'+col+'"></span>'+
-      num(bounds[i],dp)+" – "+num(bounds[i+1],dp)+"</div>";}).join("")+
-    '<div class="row" style="margin-top:6px">'+METRICS[metric].unit+'</div>';
-}
+(function(){var t="dark";try{t=localStorage.getItem("gt-theme")||"dark";}catch(e){}
+  document.documentElement.setAttribute("data-theme",t);})();
 
-/* ================= charts ================= */
+/* ================= tiny charts ================= */
+function sparkline(vals,w,h,col){
+  var svg=el("svg",{viewBox:"0 0 "+w+" "+h,width:w,height:h,class:"chart"});
+  var v=vals.filter(function(x){return x!=null&&isFinite(x);});
+  if(v.length<2)return svg;
+  var mn=Math.min.apply(null,v),mx=Math.max.apply(null,v),rg=(mx-mn)||1;
+  var x=function(i){return i/(vals.length-1)*w;},y=function(t){return h-2-(t-mn)/rg*(h-4);};
+  var d="",a="M0,"+h;
+  vals.forEach(function(t,i){if(t==null||!isFinite(t))return;
+    d+=(d?" L":"M")+x(i)+","+y(t); a+=" L"+x(i)+","+y(t);});
+  a+=" L"+w+","+h+" Z";
+  svg.appendChild(el("path",{d:a,fill:col,"fill-opacity":.13}));
+  svg.appendChild(el("path",{d:d,fill:"none",stroke:col,"stroke-width":1.6,
+    "stroke-linejoin":"round","stroke-linecap":"round"}));
+  var li=vals.length-1;
+  if(vals[li]!=null&&isFinite(vals[li]))
+    svg.appendChild(el("circle",{cx:x(li),cy:y(vals[li]),r:2.1,fill:col}));
+  return svg;
+}
 function axes(svg,W,H,pl,pr,pt,pb,vmin,vmax,unit,n,hours){
   var y=function(v){return pt+(H-pt-pb)*(1-(v-vmin)/((vmax-vmin)||1));};
-  for(var g=0;g<4;g++){var v=vmin+(vmax-vmin)*g/3;
+  for(var g=0;g<5;g++){var v=vmin+(vmax-vmin)*g/4;
     svg.appendChild(el("line",{x1:pl,y1:y(v),x2:W-pr,y2:y(v),stroke:cv("--line")}));
-    svg.appendChild(txt(pl-6,y(v)+3,num(v,Math.abs(vmax)<10?1:0),cv("--zinc"),9.5,"end"));}
-  if(unit)svg.appendChild(txt(pl-6,pt-2,unit,cv("--zinc"),9,"end"));
+    svg.appendChild(txt(pl-7,y(v)+3.5,num(v,Math.abs(vmax)<10?1:0),cv("--ink-3"),10,"end"));}
+  if(unit)svg.appendChild(txt(pl-7,pt-6,unit,cv("--ink-3"),9.5,"end"));
   var x=function(i){return pl+(W-pl-pr)*i/((n-1)||1);};
-  // Space the time labels evenly whatever the horizon is: 24 h forecast,
-  // 48 h replay and 72 h wind all pass through here.
-  if(hours&&n>1){var step=Math.max(1,Math.round(n/4));
-    for(var i=step;i<n;i+=step)
-      svg.appendChild(txt(x(i),H-5,hourLab(hours[i]),cv("--zinc"),9.5,"middle"));}
+  if(hours&&n>1){var st=Math.max(1,Math.round(n/6));
+    for(var i=st;i<n;i+=st)svg.appendChild(txt(x(i),H-6,hLab(hours[i]),cv("--ink-3"),10,"middle"));}
   return {x:x,y:y};
 }
-function priceBand(id,hours,p10,p50,p90,actual){
-  var svg=clr(id),W=560,H=svg.viewBox.baseVal.height,pl=46,pr=8,pt=14,pb=20,n=hours.length;
+function line(svg,a,v,col,w,dash){
+  var p=null;
+  for(var i=0;i<v.length;i++){if(v[i]==null||!isFinite(v[i]))continue;
+    p=(p===null?"M":p+" L")+a.x(i)+","+a.y(v[i]);}
+  if(p)svg.appendChild(el("path",{d:p,fill:"none",stroke:col,"stroke-width":w||2,
+    "stroke-dasharray":dash||"none","stroke-linejoin":"round"}));
+}
+
+function priceChart(id,hours,p10,p50,p90,actual){
+  var svg=sub(id),W=svg.viewBox.baseVal.width,H=svg.viewBox.baseVal.height;
+  var pl=52,pr=14,pt=18,pb=24,n=hours.length;
   var all=p10.concat(p90,actual||[]).filter(function(v){return v!=null&&isFinite(v);});
-  var vmin=Math.min(0,d3.min(all))-5,vmax=d3.max(all)+5;
+  var vmin=Math.min(0,d3.min(all))-6,vmax=d3.max(all)+6;
   var a=axes(svg,W,H,pl,pr,pt,pb,vmin,vmax,"€/MWh",n,hours);
   if(vmin<0)svg.appendChild(el("line",{x1:pl,y1:a.y(0),x2:W-pr,y2:a.y(0),
-    stroke:cv("--neg"),"stroke-dasharray":"3 3","stroke-width":1}));
+    stroke:cv("--neg"),"stroke-dasharray":"4 4","stroke-width":1.2}));
   var d="M"+a.x(0)+","+a.y(p10[0]);
   for(var i=1;i<n;i++)d+=" L"+a.x(i)+","+a.y(p10[i]);
   for(var j=n-1;j>=0;j--)d+=" L"+a.x(j)+","+a.y(p90[j]);
-  svg.appendChild(el("path",{d:d+" Z",fill:cv("--copper-wash")}));
-  function line(v,col,w,dash){var p=null;
-    for(var i=0;i<v.length;i++){if(v[i]==null||!isFinite(v[i]))continue;
-      p=(p===null?"M":p+" L")+a.x(i)+","+a.y(v[i]);}
-    if(p)svg.appendChild(el("path",{d:p,fill:"none",stroke:col,"stroke-width":w,
-      "stroke-dasharray":dash||"none","stroke-linejoin":"round"}));}
-  line(p50,cv("--copper"),2);
-  if(actual)line(actual,cv("--ink"),1.5,"4 3");
+  svg.appendChild(el("path",{d:d+" Z",fill:cv("--accent"),"fill-opacity":.17}));
+  line(svg,a,p50,cv("--accent"),2.6);
+  if(actual)line(svg,a,actual,cv("--ink"),1.8,"5 4");
+  // hover readout
+  var g=el("g",{opacity:0}),vl=el("line",{y1:pt,y2:H-pb,stroke:cv("--ink-3"),
+    "stroke-dasharray":"3 3"}),dot=el("circle",{r:3.6,fill:cv("--accent")});
+  var lb=el("text",{"font-family":'"IBM Plex Mono",monospace',"font-size":11,
+    fill:cv("--ink"),"text-anchor":"middle"});
+  g.appendChild(vl);g.appendChild(dot);g.appendChild(lb);svg.appendChild(g);
+  svg.addEventListener("mousemove",function(e){
+    var r=svg.getBoundingClientRect();
+    var px=(e.clientX-r.left)/r.width*W;
+    var i=Math.round((px-pl)/((W-pl-pr)/((n-1)||1)));
+    if(i<0||i>=n){g.setAttribute("opacity",0);return;}
+    g.setAttribute("opacity",1);
+    vl.setAttribute("x1",a.x(i));vl.setAttribute("x2",a.x(i));
+    dot.setAttribute("cx",a.x(i));dot.setAttribute("cy",a.y(p50[i]));
+    lb.setAttribute("x",Math.max(46,Math.min(W-46,a.x(i))));
+    lb.setAttribute("y",Math.max(pt+11,a.y(p50[i])-11));
+    lb.textContent=hLab(hours[i])+"  "+num(p50[i],1)+" €/MWh";
+  });
+  svg.addEventListener("mouseleave",function(){g.setAttribute("opacity",0);});
 }
-function stackedArea(id,hours,wind,solar){
-  var svg=clr(id),W=560,H=svg.viewBox.baseVal.height,pl=46,pr=8,pt=14,pb=20,n=hours.length;
+
+function genChart(id,hours,wind,solar,demand){
+  var svg=sub(id),W=svg.viewBox.baseVal.width,H=svg.viewBox.baseVal.height;
+  var pl=52,pr=48,pt=18,pb=24,n=hours.length;
   var tot=wind.map(function(w,i){return w+solar[i];});
-  var a=axes(svg,W,H,pl,pr,pt,pb,0,(d3.max(tot)||1)*1.08,"MW",n,hours);
+  var a=axes(svg,W,H,pl,pr,pt,pb,0,(d3.max(tot)||1)*1.1,"MW",n,hours);
   function area(top,base,fill){var d="M"+a.x(0)+","+a.y(base[0]);
     for(var i=0;i<n;i++)d+=" L"+a.x(i)+","+a.y(top[i]);
     for(var j=n-1;j>=0;j--)d+=" L"+a.x(j)+","+a.y(base[j]);
-    svg.appendChild(el("path",{d:d+" Z",fill:fill,"fill-opacity":.85}));}
+    svg.appendChild(el("path",{d:d+" Z",fill:fill,"fill-opacity":.82}));}
   var zero=hours.map(function(){return 0;});
   area(tot,wind,cv("--solar"));area(wind,zero,cv("--wind"));
+  if(demand&&demand.length===n){
+    var dmax=(d3.max(demand)||1)*1.08;
+    var dy=function(v){return pt+(H-pt-pb)*(1-v/dmax);};
+    var p=null;
+    for(var i=0;i<n;i++){p=(p===null?"M":p+" L")+a.x(i)+","+dy(demand[i]);}
+    svg.appendChild(el("path",{d:p,fill:"none",stroke:cv("--ink-3"),"stroke-width":1.7,
+      "stroke-dasharray":"5 4"}));
+    for(var g2=0;g2<3;g2++){var v=dmax*(g2+1)/3;
+      svg.appendChild(txt(W-pr+6,dy(v)+3.5,num(v/1000,0)+"G",cv("--ink-3"),9.5,"start"));}
+  }
 }
-function twoLines(id,hours,aV,bV,unit,cA,cB){
-  var svg=clr(id),W=560,H=svg.viewBox.baseVal.height,pl=46,pr=8,pt=14,pb=20,n=hours.length;
-  var all=aV.concat(bV).filter(function(v){return v!=null&&isFinite(v);});
-  if(!all.length)return;
-  var a=axes(svg,W,H,pl,pr,pt,pb,Math.min(0,d3.min(all)),(d3.max(all)||1)*1.06,unit,n,hours);
-  function line(v,col,dash){var p=null;
-    for(var i=0;i<v.length;i++){if(v[i]==null||!isFinite(v[i]))continue;
-      p=(p===null?"M":p+" L")+a.x(i)+","+a.y(v[i]);}
-    if(p)svg.appendChild(el("path",{d:p,fill:"none",stroke:col,"stroke-width":1.8,
-      "stroke-dasharray":dash||"none","stroke-linejoin":"round"}));}
-  line(aV,cA,"4 3");line(bV,cB);
+
+function carbonChart(id,hours,vals){
+  var svg=sub(id),W=svg.viewBox.baseVal.width,H=svg.viewBox.baseVal.height;
+  var pl=52,pr=14,pt=18,pb=24,n=hours.length;
+  var ok=vals.filter(function(v){return v!=null&&isFinite(v);});
+  if(!ok.length)return;
+  var a=axes(svg,W,H,pl,pr,pt,pb,Math.min.apply(null,ok)*.9,Math.max.apply(null,ok)*1.05,
+    "gCO₂/kWh",n,hours);
+  var d="M"+a.x(0)+","+(H-pb);
+  for(var i=0;i<n;i++)d+=" L"+a.x(i)+","+a.y(vals[i]);
+  d+=" L"+a.x(n-1)+","+(H-pb)+" Z";
+  svg.appendChild(el("path",{d:d,fill:cv("--carbon"),"fill-opacity":.14}));
+  line(svg,a,vals,cv("--carbon"),2.2);
+  var mn=vals.indexOf(Math.min.apply(null,ok));
+  if(mn>=0)svg.appendChild(el("circle",{cx:a.x(mn),cy:a.y(vals[mn]),r:4,fill:cv("--pos"),
+    stroke:cv("--card"),"stroke-width":1.6}));
 }
-function signalStrip(id,hours,sigs,reasons){
-  var svg=clr(id),W=560,n=hours.length,bw=W/n;
-  var col={SELL:cv("--sell"),STORE:cv("--store"),DISCHARGE:cv("--discharge"),
-           CURTAIL:cv("--curtail"),HOLD:cv("--hold")};
-  var hint=document.getElementById("sig-hint");
-  for(var i=0;i<n;i++)(function(i){
-    var c=col[sigs[i]]||cv("--hold");
-    var r=el("rect",{x:i*bw+.6,y:8,width:bw-1.2,height:28,rx:1.5,fill:c});
-    r.style.cursor="pointer";
-    r.addEventListener("mouseenter",function(){
-      hint.innerHTML='<span class="pill" style="background:'+c+'">'+sigs[i]+'</span> '+
-        hourLab(hours[i])+" — "+reasons[i];});
-    svg.appendChild(r);
-    if(i%6===0)svg.appendChild(txt(i*bw+bw/2,51,hourLab(hours[i]),cv("--zinc"),9.5,"middle"));
-  })(i);
-  svg.addEventListener("mouseleave",function(){
-    hint.textContent="Hover a bar for the reasoning.";});
+
+function replayChart(id,rp){
+  var svg=sub(id),W=svg.viewBox.baseVal.width,H=svg.viewBox.baseVal.height;
+  var pl=52,pr=14,pt=18,pb=24,n=rp.hours.length;
+  var all=rp.price_actual.concat(rp.price_p50).filter(function(v){return v!=null&&isFinite(v);});
+  var a=axes(svg,W,H,pl,pr,pt,pb,Math.min(0,d3.min(all))-5,d3.max(all)+5,"€/MWh",n,rp.hours);
+  line(svg,a,rp.price_p50,cv("--accent"),2,"5 4");
+  line(svg,a,rp.price_actual,cv("--ink"),2);
 }
-function capacityChart(id,cap){
-  // The feed ships 18 types; most are flat lines that would only add ink.
-  // These are the ones that carry the transition story.
-  var want=[["Wind onshore",cv("--wind")],["Wind offshore","#1B4F7E"],
+
+function capChart(id,cap){
+  var want=[["Wind onshore",cv("--wind")],["Wind offshore","#1D4E89"],
             ["Solar AC",cv("--solar")],["Solar DC",cv("--solar")],
-            ["Nuclear",cv("--discharge")],["Fossil gas",cv("--zinc")],
-            ["Fossil hard coal","#3A3F45"],["Fossil brown coal / lignite","#6B5344"],
-            ["Battery storage (power)",cv("--sell")]];
+            ["Nuclear","#A78BFA"],["Fossil gas",cv("--ink-3")],
+            ["Fossil hard coal","#4B5563"],["Fossil brown coal / lignite","#7C6650"],
+            ["Battery storage (power)",cv("--pos")]];
   var series=[];
-  want.forEach(function(w){
-    var d=cap.types[w[0]];if(!d)return;
-    if(w[0]==="Solar DC"&&cap.types["Solar AC"])return;   // never count solar twice
+  want.forEach(function(w){var d=cap.types[w[0]];if(!d)return;
+    if(w[0]==="Solar DC"&&cap.types["Solar AC"])return;
     if(d.some(function(v){return v&&v>0.05;}))series.push({name:w[0],col:w[1],data:d});});
-  if(!series.length){document.getElementById("grid-sec").style.display="none";return;}
-  document.getElementById("grid-sec").style.display="";
-  var svg=clr(id),W=560,H=175,pl=46,pr=8,pt=14,pb=20;
+  if(!series.length){document.getElementById("capsec").style.display="none";return;}
+  document.getElementById("capsec").style.display="";
+  var svg=sub(id),W=svg.viewBox.baseVal.width,H=svg.viewBox.baseVal.height;
+  var pl=52,pr=14,pt=18,pb=24;
   var yrs=cap.years.map(Number),n=yrs.length,vmax=0;
   series.forEach(function(s){s.data.forEach(function(v){if(v>vmax)vmax=v;});});
   var a=axes(svg,W,H,pl,pr,pt,pb,0,vmax*1.06,"GW",n,null);
   var cut=yrs.indexOf(new Date().getUTCFullYear());
   if(cut>0){svg.appendChild(el("line",{x1:a.x(cut),y1:pt,x2:a.x(cut),y2:H-pb,
-      stroke:cv("--ink-2"),"stroke-dasharray":"2 3","stroke-width":1}));
-    svg.appendChild(txt(a.x(cut)+3,pt+8,"planned →",cv("--zinc"),9));}
-  series.forEach(function(s){var p=null;
-    for(var i=0;i<n;i++){var v=s.data[i];if(v==null)continue;
-      p=(p===null?"M":p+" L")+a.x(i)+","+a.y(v);}
-    if(p)svg.appendChild(el("path",{d:p,fill:"none",stroke:s.col,"stroke-width":1.9,
-      "stroke-linejoin":"round"}));});
+    stroke:cv("--ink-3"),"stroke-dasharray":"3 3"}));
+    svg.appendChild(txt(a.x(cut)+4,pt+10,"planned →",cv("--ink-3"),10));}
+  series.forEach(function(s){line(svg,a,s.data,s.col,2);});
   [0,Math.floor(n/3),Math.floor(2*n/3),n-1].forEach(function(i){
-    svg.appendChild(txt(a.x(i),H-5,yrs[i],cv("--zinc"),9.5,"middle"));});
+    svg.appendChild(txt(a.x(i),H-6,yrs[i],cv("--ink-3"),10,"middle"));});
   document.getElementById("cap-key").innerHTML=series.map(function(s){
-    return '<i style="background:'+s.col+'"></i>'+s.name;}).join(" &nbsp; ");
+    return '<i style="display:inline-block;width:8px;height:8px;border-radius:2px;'+
+      'margin-right:4px;background:'+s.col+'"></i>'+esc(s.name);}).join(" &nbsp; ");
 }
 
-/* ================= solar grid ================= */
-/* PVGIS yield is baked out on a lattice because the browser cannot call PVGIS
-   (it sends no CORS header). 0 marks sea; we fall back to the nearest land
-   node so a click on a coastline still answers. */
+/* ================= heatmap ================= */
+function heatmap(){
+  var f=D.forecast,host=sub("heatmap");
+  var rows=[
+    {k:"Price",v:f.p50,u:"€/MWh",hi:"neg"},
+    {k:"Solar",v:f.solar_mw,u:"MW",hi:"pos"},
+    {k:"Wind",v:f.wind_mw,u:"MW",hi:"pos"},
+    {k:"Demand",v:f.demand_mw||null,u:"MW",hi:"neg"},
+    {k:"Carbon",v:D.carbon?D.carbon.forecast_g_kwh:null,u:"gCO₂/kWh",hi:"neg"}
+  ].filter(function(r){return r.v&&r.v.length===f.hours.length;});
+
+  var t=document.createElement("table");
+  var thead=document.createElement("tr");
+  thead.appendChild(document.createElement("th"));
+  f.hours.forEach(function(h){var th=document.createElement("th");th.className="hr";
+    th.textContent=new Date(h).getHours().toString().padStart(2,"0");thead.appendChild(th);});
+  t.appendChild(thead);
+
+  rows.forEach(function(r){
+    var vals=r.v.filter(function(v){return v!=null&&isFinite(v);});
+    var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals),rg=(mx-mn)||1;
+    var tr=document.createElement("tr");
+    var td0=document.createElement("td");td0.className="lbl";td0.textContent=r.k;tr.appendChild(td0);
+    r.v.forEach(function(v,i){
+      var td=document.createElement("td");td.className="cell";
+      var t01=(v-mn)/rg;
+      // "hi" says whether a high value is good; colour follows meaning, not magnitude.
+      var good=r.hi==="pos"?t01:1-t01;
+      var col=d3.interpolateRgb(cv("--card-2"),good>0.5?cv("--pos"):cv("--neg"))(Math.abs(good-.5)*2*.8+.15);
+      td.style.background=col;
+      td.title=r.k+" at "+hLab(f.hours[i])+": "+num(v,1)+" "+r.u;
+      tr.appendChild(td);
+    });
+    t.appendChild(tr);
+  });
+
+  // Signal row keeps the decision engine's own palette.
+  var sc={SELL:cv("--pos"),DISCHARGE:"#A78BFA",STORE:cv("--info"),
+          CURTAIL:cv("--neg"),HOLD:cv("--ink-3")};
+  var tr=document.createElement("tr");
+  var td0=document.createElement("td");td0.className="lbl";
+  td0.innerHTML='<b style="color:var(--ink)">Signal</b>';tr.appendChild(td0);
+  f.signal.forEach(function(s,i){
+    var td=document.createElement("td");td.className="cell";
+    td.style.background=sc[s]||cv("--ink-3");
+    td.innerHTML='<span style="color:#fff">'+s[0]+'</span>';
+    td.title=hLab(f.hours[i])+" — "+s+": "+(f.signal_reason?f.signal_reason[i]:"");
+    tr.appendChild(td);
+  });
+  t.appendChild(tr);
+  host.appendChild(t);
+}
+
+/* ================= KPI cards ================= */
+function kpiCard(o){
+  var d=document.createElement("div");d.className="card c3 kpi";
+  var dc=o.delta==null?"flat":(o.delta>0?"up":(o.delta<0?"down":"flat"));
+  // Colour by MEANING: for carbon and price, up is bad for a buyer.
+  if(o.invert&&dc!=="flat")dc=dc==="up"?"down":"up";
+  var arrow=o.delta==null?"":(o.delta>0?"▲":(o.delta<0?"▼":"■"));
+  d.innerHTML=
+    '<div class="lab">'+esc(o.label)+'</div>'+
+    '<div class="val">'+esc(o.value)+(o.unit?' <small>'+esc(o.unit)+'</small>':'')+'</div>'+
+    '<div class="foot"><span class="delta '+dc+'">'+arrow+' '+
+      (o.delta==null?"no comparison":num(Math.abs(o.delta),1)+(o.deltaUnit||""))+'</span>'+
+      '<span class="ctx">'+esc(o.ctx||"")+'</span><span class="spark"></span></div>';
+  if(o.spark&&o.spark.length>2)
+    d.querySelector(".spark").appendChild(sparkline(o.spark,86,30,o.col||cv("--accent-2")));
+  return d;
+}
+function renderKpis(){
+  var host=sub("kpis"),k=D.kpis,r=D.recent||{};
+  function meanOf(a){var v=(a||[]).filter(function(x){return x!=null&&isFinite(x);});
+    return v.length?v.reduce(function(p,c){return p+c;},0)/v.length:null;}
+  function dlt(a){if(!a||a.length<48)return null;
+    var n=meanOf(a.slice(-24)),p=meanOf(a.slice(-48,-24));
+    return (n==null||p==null)?null:n-p;}
+
+  host.appendChild(kpiCard({label:"Price",value:num(k.last_price_eur_mwh,1),unit:"€/MWh",
+    delta:dlt(r.price_eur_mwh),deltaUnit:" vs prev 24h",ctx:r.hours?"at "+hLab(r.hours[r.hours.length-1]):"",
+    spark:r.price_eur_mwh,col:cv("--accent-2"),invert:true}));
+
+  var cf=D.carbon;
+  host.appendChild(kpiCard({label:"Carbon intensity",
+    value:k.carbon_now_g_kwh!=null?num(k.carbon_now_g_kwh,0):"—",unit:"gCO₂/kWh",
+    delta:cf?dlt(cf.recent_g_kwh):null,deltaUnit:" g",
+    ctx:cf?"cleanest "+hLab(cf.cleanest_hour_utc):"",
+    spark:cf?cf.recent_g_kwh:null,col:cv("--carbon"),invert:true}));
+
+  var share=null;
+  if(r.generation_mw&&r.generation_mw.length)
+    share=r.generation_mw.map(function(g,i){
+      var dm=(D.forecast.demand_mw&&D.forecast.demand_mw[0])||null;
+      return dm?g/dm*100:null;});
+  host.appendChild(kpiCard({label:"Renewable share",value:num(k.renewable_share_pct,0),unit:"% of demand",
+    delta:null,ctx:"88-day average",spark:r.generation_mw,col:cv("--pos")}));
+
+  var imp=k.net_import_gw;
+  host.appendChild(kpiCard({label:imp!=null&&imp<0?"Net export":"Net import",
+    value:imp!=null?num(Math.abs(imp),2):"—",unit:"GW",delta:null,
+    ctx:(D.flows&&D.flows.length?D.flows.length+" interconnectors":"88-day average"),
+    spark:null,col:cv("--info")}));
+}
+
+/* ================= insight ================= */
+function renderInsight(){
+  var m=D.market||{},g=document.getElementById("ins-score");
+  document.getElementById("ins-headline").textContent=D.headline||"—";
+  g.textContent=m.score!=null?m.score:"—";
+  var rec=document.getElementById("ins-rec");
+  rec.textContent=m.recommendation||"—";
+  rec.className="rec "+({"Strong Sell":"ss","Sell":"s","Hold":"h","Buy":"b","Strong Buy":"sb"}[m.recommendation]||"h");
+  var bar=document.getElementById("ins-bar");
+  bar.style.width=(m.score||0)+"%";
+  bar.style.background=m.score>=60?cv("--neg"):(m.score<=40?cv("--pos"):cv("--ink-3"));
+  document.getElementById("ins-rationale").textContent=m.rationale||"";
+  document.getElementById("ins-ver").textContent=D.model?("model v"+D.model.version):"";
+
+  // Confidence = measured out-of-sample band coverage against its 80% target.
+  var cov=D.metrics?D.metrics.price_coverage_pct:null;
+  var conf=cov==null?null:Math.max(0,Math.min(100,100-Math.abs(cov-80)*2.5));
+  document.getElementById("conf-val").textContent=conf==null?"—":Math.round(conf)+"%";
+  var cb=document.getElementById("conf-bar");
+  cb.style.width=(conf||0)+"%";
+  cb.style.background=conf>=75?cv("--pos"):(conf>=50?cv("--warn"):cv("--neg"));
+
+  var ICON={Solar:"☀",Wind:"🌬",Demand:"⚡",Price:"€",Carbon:"🏭","Net imports":"🌍"};
+  function drvRows(host,rows){
+    var h=sub(host);
+    (rows||[]).forEach(function(r){
+      var d=document.createElement("div");d.className="drv-row";
+      var ar=r.direction==="up"?"↑":(r.direction==="down"?"↓":"→");
+      var cls=r.direction==="flat"?"flat":
+        (r.good_up==null?"flat":((r.direction==="up")===!!r.good_up?"up":"down"));
+      d.innerHTML='<span class="ic">'+(ICON[r.name]||"•")+'</span>'+
+        '<span class="nm">'+esc(r.name)+'</span>'+
+        '<span class="vl">'+num(r.value,r.unit==="GW"?2:0)+' <span style="color:var(--ink-3)">'+
+          esc(r.unit)+'</span></span>'+
+        '<span class="ar '+cls+'">'+ar+'</span>'+
+        '<span class="vl '+cls+'" style="width:62px;text-align:right">'+
+          (r.delta_pct==null?"":(r.delta_pct>0?"+":"")+num(r.delta_pct,0)+"%")+'</span>';
+      h.appendChild(d);
+    });
+    if(!rows||!rows.length)h.innerHTML='<div class="empty">No driver data.</div>';
+  }
+  drvRows("ins-drivers",(D.drivers||[]).slice(0,5));
+  drvRows("drivers-full",D.drivers);
+  document.getElementById("ins-note").textContent=m.note||"";
+}
+
+/* ================= flows ================= */
+function renderFlows(){
+  var host=sub("flows-list"),fl=D.flows;
+  if(!fl||!fl.length){host.innerHTML='<div class="empty">No cross-border data.</div>';return;}
+  var mx=d3.max(fl,function(f){return Math.abs(f.net_gw);})||1;
+  fl.forEach(function(f){
+    var into=f.net_gw>0,w=Math.abs(f.net_gw)/mx*46;
+    var d=document.createElement("div");d.className="flow-row";
+    d.innerHTML='<span class="nm">'+esc(f.name)+'</span>'+
+      '<span class="flow-track"><span class="mid"></span>'+
+        '<span class="fill" style="'+(into?"left:50%":"left:"+(50-w)+"%")+";width:"+w+"%;"+
+          "background:"+(into?cv("--pos"):cv("--accent"))+'"></span>'+
+        '<span class="ar '+(into?"up":"down")+'" style="'+
+          (into?"left:calc(50% + "+w+"% + 3px)":"left:calc("+(50-w)+"% - 15px)")+'">'+
+          (into?"→":"←")+'</span></span>'+
+      '<span class="gw '+(into?"up":"down")+'">'+(into?"+":"−")+num(Math.abs(f.net_gw),2)+' GW</span>';
+    d.title=into?("Importing "+num(Math.abs(f.net_gw),2)+" GW from "+f.name)
+                :("Exporting "+num(Math.abs(f.net_gw),2)+" GW to "+f.name);
+    host.appendChild(d);
+  });
+}
+
+/* ================= quality + news ================= */
+function renderQuality(){
+  var host=sub("quality"),m=D.metrics;
+  if(!m){host.innerHTML='<div class="empty">No out-of-sample evaluation for this market.</div>';
+    document.getElementById("model-meta").textContent="";return;}
+  var acc=Math.max(0,100-m.gen_mae_pct);
+  [["Generation error",m.gen_mae_pct+"%","mean abs. error, "+m.holdout_days+" held-out days"],
+   ["Forecast accuracy",num(acc,0)+"%","100 minus the error above"],
+   ["Band coverage",m.price_coverage_pct+"%","target 80% — higher is not better"],
+   ["Sharpe ratio",m.backtest_sharpe,"risk-adjusted return of the signals"],
+   ["Strategy edge",(m.backtest_edge_pct>0?"+":"")+m.backtest_edge_pct+"%","vs selling everything now"]
+  ].forEach(function(c){
+    var d=document.createElement("div");d.className="stat";
+    d.innerHTML='<div class="k">'+esc(c[0])+'</div><div class="v">'+esc(c[1])+
+      '</div><div class="d">'+esc(c[2])+'</div>';
+    host.appendChild(d);
+  });
+  document.getElementById("cov-v").textContent=m.price_coverage_pct+"%";
+  var mo=D.model;
+  document.getElementById("model-meta").textContent=mo
+    ? "Model v"+mo.version+" · retrained "+new Date(mo.trained_utc).toLocaleString("en-GB")+
+      " on "+num(mo.train_rows,0)+" hours ("+mo.history_days+" days) · "+mo.algorithms
+    : "";
+  if(D.replay)replayChart("c-replay",D.replay);
+}
+function renderNews(){
+  var host=sub("news"),ns=D.news;
+  if(!ns||!ns.length){host.innerHTML='<div class="empty">No headlines found.</div>';return;}
+  ns.forEach(function(n){
+    var a=document.createElement("a");a.className="item";a.href=n.url;
+    a.target="_blank";a.rel="noopener noreferrer";
+    var cls=n.impact==="bullish"?"pos":(n.impact==="bearish"?"neg":"mute");
+    var lab=n.impact==="bullish"?"cheaper":(n.impact==="bearish"?"pricier":"neutral");
+    a.innerHTML='<div class="t">'+esc(n.title)+'</div><div class="m">'+
+      '<span class="tag '+cls+'">'+lab+'</span>'+
+      '<span>'+esc(n.source||"")+'</span>'+
+      '<span>'+esc((n.published||"").slice(0,16))+'</span></div>';
+    host.appendChild(a);
+  });
+}
+
+/* ================= risk + carbon stats ================= */
+function renderRisk(){
+  var f=D.forecast;
+  var w=[];for(var i=0;i<f.p50.length;i++)w.push(f.p90[i]-f.p10[i]);
+  var mw=w.reduce(function(a,b){return a+b;},0)/w.length;
+  var rel=Math.abs(d3.mean(f.p50))>1?mw/Math.abs(d3.mean(f.p50)):9;
+  var maxRisk=Math.max.apply(null,f.neg_risk_pct||[0]);
+  var lvl=(rel>1.2||maxRisk>40)?"High":((rel>0.6||maxRisk>15)?"Medium":"Low");
+  var e=document.getElementById("risk-v");
+  e.textContent=lvl;
+  e.style.color=lvl==="High"?cv("--neg"):(lvl==="Medium"?cv("--warn"):cv("--pos"));
+  document.getElementById("risk-d").textContent=
+    "band ±"+num(mw/2,0)+" €/MWh · neg-price risk peaks "+num(maxRisk,0)+"%";
+  if(D.carbon){
+    document.getElementById("cln-h").textContent=hLab(D.carbon.cleanest_hour_utc);
+    document.getElementById("cln-v").textContent=num(D.carbon.cleanest_g_kwh,0)+" gCO₂/kWh";
+    document.getElementById("carbon-sub").textContent="our forecast — feed publishes history only";
+  }
+}
+
+/* ================= explain modal ================= */
+function openModal(){document.getElementById("scrim").classList.add("on");
+  document.getElementById("modal").classList.add("on");
+  document.getElementById("modal-x").focus();}
+function closeModal(){document.getElementById("scrim").classList.remove("on");
+  document.getElementById("modal").classList.remove("on");}
+function renderExplain(){
+  var b=sub("modal-body"),ex=D.explain;
+  document.getElementById("modal-sub").textContent=
+    D.name_en+" · next 24 h · "+(ex?ex.method:"");
+  if(!ex){b.innerHTML='<div class="empty">No explanation available for this market.</div>';return;}
+
+  var a=ex.aggregate,mx=d3.max(a.features,function(f){return Math.abs(f.effect_eur_mwh);})||1;
+  var h='<p style="font-size:13px;color:var(--ink-2);margin:0 0 4px">'+
+    'The model starts from a base of <b class="num">'+num(a.base_eur_mwh,1)+' €/MWh</b> '+
+    '(its average output) and each driver below pushes the forecast up or down from there. '+
+    'These are exact Shapley values, so the pushes sum to the prediction.</p>';
+
+  h+='<div class="sec-t">Top 5 features affecting this forecast</div><div class="shap">';
+  a.features.forEach(function(f){
+    var pos=f.effect_eur_mwh>0,w=Math.abs(f.effect_eur_mwh)/mx*46;
+    h+='<div class="shap-row"><span class="nm">'+esc(f.label)+'</span>'+
+      '<span class="shap-bar"><span class="mid"></span>'+
+      '<i style="'+(pos?"left:50%":"left:"+(50-w)+"%")+";width:"+w+"%;background:"+
+        (pos?cv("--neg"):cv("--pos"))+'"></i></span>'+
+      '<span class="vl '+(pos?"down":"up")+'">'+(pos?"+":"")+num(f.effect_eur_mwh,1)+
+        ' <span style="color:var(--ink-3)">'+num(f.share_pct,0)+'%</span></span></div>';
+  });
+  h+='</div><div style="font-size:11px;color:var(--ink-3);margin-top:8px">'+
+    'Red pushes the price up, green pushes it down. Percentages are each feature\'s share '+
+    'of the total movement the model explains.</div>';
+
+  var f0=D.forecast;
+  h+='<div class="sec-t">Confidence interval</div>'+
+    '<p style="font-size:13px;color:var(--ink-2);margin:0">For the first hour the model gives '+
+    '<b class="num">'+num(f0.p50[0],1)+' €/MWh</b>, with an 80% conformal interval of '+
+    '<b class="num">'+num(f0.p10[0],1)+'</b> to <b class="num">'+num(f0.p90[0],1)+'</b> €/MWh'+
+    (D.metrics?'. Measured coverage on held-out data was <b>'+D.metrics.price_coverage_pct+
+      '%</b> against an 80% target.':'.')+'</p>';
+
+  if(ex.similar_days&&ex.similar_days.length){
+    h+='<div class="sec-t">Most similar historical hours</div>';
+    h+='<p style="font-size:12px;color:var(--ink-3);margin:0 0 6px">Nearest neighbours in the '+
+      'model\'s own feature space, and what price actually did then.</p>';
+    ex.similar_days.forEach(function(s){
+      h+='<div class="simrow"><span class="dt">'+
+        new Date(s.time).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+
+        '</span><span style="color:var(--ink-3);font-size:11.5px">distance '+num(s.distance,2)+
+        '</span><span class="pz">'+num(s.price_eur_mwh,1)+' €/MWh</span></div>';
+    });
+  }
+
+  h+='<div class="sec-t">What would invalidate this forecast</div><ul class="mlist">';
+  (ex.invalidators||[]).forEach(function(s){h+='<li>'+esc(s)+'</li>';});
+  h+='</ul>';
+  b.innerHTML=h;
+}
+
+/* ================= portfolio ================= */
 function yieldAt(lat,lon){
   if(!SOLAR)return null;
   var La=SOLAR.lats,Lo=SOLAR.lons;
@@ -553,8 +1090,7 @@ function yieldAt(lat,lon){
   var ty=(lat-La[i])/(La[i+1]-La[i]),tx=(lon-Lo[j])/(Lo[j+1]-Lo[j]);
   var q=[[SOLAR.yearly[i][j],(1-tx)*(1-ty)],[SOLAR.yearly[i][j+1],tx*(1-ty)],
          [SOLAR.yearly[i+1][j],(1-tx)*ty],[SOLAR.yearly[i+1][j+1],tx*ty]];
-  var s=0,w=0;
-  q.forEach(function(p){if(p[0]){s+=p[0]*p[1];w+=p[1];}});
+  var s=0,w=0;q.forEach(function(p){if(p[0]){s+=p[0]*p[1];w+=p[1];}});
   if(w>0.35)return s/w;
   var best=null,bd=1e9;
   for(var a=0;a<La.length;a++)for(var b=0;b<Lo.length;b++){
@@ -563,367 +1099,497 @@ function yieldAt(lat,lon){
     if(d<bd){bd=d;best=v;}}
   return bd<9?best:null;
 }
-
-/* ================= tools ================= */
-function renderSolar(){
-  var box=document.getElementById("o-solar");
-  var kwp=parseFloat(document.getElementById("i-kwp").value);
-  document.getElementById("solar-pt").textContent=
-    site.lat==null?"—":site.lat.toFixed(2)+"°, "+site.lon.toFixed(2)+"°";
-  if(!SOLAR){box.innerHTML='<div class="err">Solar grid not loaded.</div>';return;}
-  if(!(kwp>0)){box.innerHTML='<div class="err">Enter a system size above 0.</div>';return;}
-  var y=site.lat==null?null:yieldAt(site.lat,site.lon);
-  if(!y){box.innerHTML='<div class="err">No solar data for that point — pick a spot on land.</div>';return;}
-
-  var mwh=y*kwp/1000,cap=curData.capture||{};
-  var capPct=cap.solar_capture_pct;
-  var price=cap.solar_captured_eur_mwh!=null?cap.solar_captured_eur_mwh:cap.mean_price_eur_mwh;
-  var rev=price!=null?mwh*price:null;
-  var naive=cap.mean_price_eur_mwh!=null?mwh*cap.mean_price_eur_mwh:null;
-
-  box.innerHTML=
-    '<div class="split"><div><div class="lab">Annual output</div>'+
-      '<div class="big">'+num(y*kwp,0)+' <span style="font-size:13px">kWh</span></div>'+
-      '<div class="note">'+num(y,0)+' kWh per kWp · PVGIS satellite climatology</div></div>'+
-    '<div><div class="lab">Wholesale value</div>'+
-      '<div class="big">'+(rev==null?"—":"€"+num(rev,0))+'</div>'+
-      '<div class="note">at '+num(price,1)+' €/MWh captured</div></div></div>'+
-    (capPct!=null?'<p><b>Capture rate '+capPct+'%.</b> Your panels sell when every other '+
-      'panel does, and that midday glut pushes the price down — so they earn '+capPct+
-      '% of the average market price, not 100%. Valuing this at the plain average would '+
-      'have claimed €'+num(naive,0)+'.</p>':'')+
-    '<p class="note">Wholesale only: no grid fees, taxes, subsidies or feed-in tariff. '+
-      'Capture rate is measured over the last 88 days, which for solar is the harshest '+
-      'stretch of the year. Yield is interpolated from a 2° lattice, so expect ~10% '+
-      'error in mountains and on narrow coastlines.</p>';
-}
-function turbineMW(v,rated){
-  // The same piecewise curve the forecast models use (src/features/
-  // generation_features.py): cut-in 3, rated 12, cut-out 25 m/s, P ~ v^3.
-  var CUT_IN=3,RATED=12,CUT_OUT=25;
-  if(v<CUT_IN||v>=CUT_OUT)return 0;
-  return rated*Math.pow(Math.min(v,RATED)/RATED,3);
-}
-function renderWind(){
-  var box=document.getElementById("o-wind");
-  var rated=parseFloat(document.getElementById("i-mw").value);
-  document.getElementById("wind-pt").textContent=
-    site.lat==null?"—":site.lat.toFixed(2)+"°, "+site.lon.toFixed(2)+"°";
-  if(site.lat==null){box.innerHTML='<div class="err">Click the map to place the turbine.</div>';return;}
-  if(!(rated>0)){box.innerHTML='<div class="err">Enter a rating above 0.</div>';return;}
-  box.innerHTML='<div class="lab">Fetching live wind…</div>';
-
-  // Open-Meteo is the one upstream that allows browser calls, so this is
-  // genuinely live for whatever point the user picked. wind_speed_unit is
-  // explicit: the API defaults to km/h and the power curve expects m/s.
-  var url="https://api.open-meteo.com/v1/forecast?latitude="+site.lat.toFixed(3)+
-    "&longitude="+site.lon.toFixed(3)+"&hourly=wind_speed_100m&wind_speed_unit=ms&forecast_days=3";
-  var want=site.lat+","+site.lon;
-  fetch(url).then(function(r){
-    if(!r.ok)throw new Error("HTTP "+r.status);return r.json();
-  }).then(function(d){
-    if(want!==site.lat+","+site.lon)return;   // a newer click already superseded this
-    var hrs=d.hourly.time,v=d.hourly.wind_speed_100m;
-    var mw=v.map(function(s){return turbineMW(s,rated);});
-    var mwh=mw.reduce(function(a,b){return a+b;},0);
-    var cf=mwh/(rated*mw.length)*100,cap=curData.capture||{};
-    var price=cap.wind_captured_eur_mwh!=null?cap.wind_captured_eur_mwh:cap.mean_price_eur_mwh;
-    box.innerHTML=
-      '<div class="split"><div><div class="lab">Output, next '+mw.length+' h</div>'+
-        '<div class="big">'+num(mwh,1)+' <span style="font-size:13px">MWh</span></div>'+
-        '<div class="note">capacity factor '+num(cf,0)+'%</div></div>'+
-      '<div><div class="lab">Wholesale value</div>'+
-        '<div class="big">'+(price==null?"—":"€"+num(mwh*price,0))+'</div>'+
-        '<div class="note">at '+num(price,1)+' €/MWh captured'+
-        (cap.wind_capture_pct!=null?" ("+cap.wind_capture_pct+"% capture)":"")+'</div></div></div>'+
-      '<p class="note">Live wind for this exact point from Open-Meteo, run through the same '+
-        'power curve as the forecast models: cut-in 3, rated 12, cut-out 25 m/s.</p>';
-    twoLines("c-wind",hrs,hrs.map(function(){return null;}),mw,"MW",cv("--zinc"),cv("--wind"));
-  }).catch(function(e){
-    box.innerHTML='<div class="err">Live wind unavailable ('+e.message+'). Try again shortly.</div>';
+function statsHtml(host,rows){
+  var h=sub(host);
+  rows.forEach(function(r){
+    var d=document.createElement("div");d.className="stat";
+    d.innerHTML='<div class="k">'+esc(r[0])+'</div><div class="v">'+esc(r[1])+
+      '</div><div class="d">'+esc(r[2]||"")+'</div>';
+    h.appendChild(d);
   });
 }
+function nextHourIdx(){
+  var hrs=D.forecast.hours,now=Date.now(),i=0;
+  while(i<hrs.length-1&&new Date(hrs[i]).getTime()<now)i++;
+  return i;
+}
+function renderSolar(){
+  document.getElementById("solar-pt").textContent=
+    site.lat==null?"—":site.lat.toFixed(2)+"°, "+site.lon.toFixed(2)+"°";
+  var kwp=parseFloat(document.getElementById("i-kwp").value);
+  var capex=parseFloat(document.getElementById("i-capex").value);
+  var adv=document.getElementById("a-solar");
+  if(!SOLAR||!(kwp>0)){statsHtml("o-solar",[]);adv.textContent="Enter a system size above 0.";return;}
+  var y=site.lat==null?null:yieldAt(site.lat,site.lon);
+  if(!y){statsHtml("o-solar",[]);adv.textContent="No solar data for that point — pick a spot on land.";return;}
+  var mwh=y*kwp/1000,cap=D.capture||{};
+  var price=cap.solar_captured_eur_mwh!=null?cap.solar_captured_eur_mwh:cap.mean_price_eur_mwh;
+  var rev=price!=null?mwh*price:null;
+  var cost=(capex>0?capex*kwp:null);
+  var payback=(cost&&rev>0)?cost/rev:null;
+  statsHtml("o-solar",[
+    ["Annual output",num(y*kwp,0)+" kWh",num(y,0)+" kWh per kWp"],
+    ["Capture rate",cap.solar_capture_pct!=null?cap.solar_capture_pct+"%":"—","share of the average price it earns"],
+    ["Expected revenue",rev==null?"—":"€"+num(rev,0),"per year, wholesale"],
+    ["Simple payback",payback?num(payback,1)+" yr":"—",cost?"on €"+num(cost,0)+" install":"enter an install cost"],
+    ["ROI",payback?num(100/payback,1)+"%/yr":"—","revenue ÷ capital, no financing"]
+  ]);
+  adv.innerHTML="<b>Why capture rate matters.</b> Panels sell when every other panel does, and "+
+    "that midday glut pushes the price down — so this system earns "+
+    (cap.solar_capture_pct!=null?cap.solar_capture_pct+"%":"less than 100%")+
+    " of the average market price. Valuing it at the plain average would have claimed €"+
+    num(cap.mean_price_eur_mwh?mwh*cap.mean_price_eur_mwh:0,0)+
+    ". Wholesale only: no grid fees, taxes or subsidies, and yield is interpolated from a "+
+    "2° lattice (~10% error in mountains).";
+}
+function turbineMW(v,rated){
+  var CI=3,RT=12,CO=25;
+  if(v<CI||v>=CO)return 0;
+  return rated*Math.pow(Math.min(v,RT)/RT,3);
+}
+function renderWind(){
+  document.getElementById("wind-pt").textContent=
+    site.lat==null?"—":site.lat.toFixed(2)+"°, "+site.lon.toFixed(2)+"°";
+  var rated=parseFloat(document.getElementById("i-mw").value);
+  var adv=document.getElementById("a-wind");
+  if(site.lat==null||!(rated>0)){adv.textContent="Click the map to place the turbine.";return;}
+  adv.textContent="Fetching live wind…";
+  var want=site.lat+","+site.lon+","+rated;
+  var url="https://api.open-meteo.com/v1/forecast?latitude="+site.lat.toFixed(3)+
+    "&longitude="+site.lon.toFixed(3)+"&hourly=wind_speed_100m&wind_speed_unit=ms&forecast_days=3";
+  fetch(url).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
+    .then(function(d){
+      if(want!==site.lat+","+site.lon+","+rated)return;
+      var hrs=d.hourly.time,v=d.hourly.wind_speed_100m;
+      var mw=v.map(function(s){return turbineMW(s,rated);});
+      var mwh=mw.reduce(function(a,b){return a+b;},0);
+      var cf=mwh/(rated*mw.length)*100,cap=D.capture||{};
+      var price=cap.wind_captured_eur_mwh!=null?cap.wind_captured_eur_mwh:cap.mean_price_eur_mwh;
+      var best=0;for(var i=1;i<mw.length;i++)if(mw[i]>mw[best])best=i;
+      statsHtml("o-wind",[
+        ["Output, next "+mw.length+" h",num(mwh,1)+" MWh","capacity factor "+num(cf,0)+"%"],
+        ["Capture rate",cap.wind_capture_pct!=null?cap.wind_capture_pct+"%":"—","share of average price earned"],
+        ["Expected revenue",price==null?"—":"€"+num(mwh*price,0),"at "+num(price,1)+" €/MWh"],
+        ["Peak output",num(mw[best],2)+" MW","at "+hLab(hrs[best])],
+        ["Best hours",num(mw.filter(function(x){return x>rated*0.5;}).length,0)+" h",">50% of rating"]
+      ]);
+      adv.innerHTML="<b>Live wind for this exact point</b> from Open-Meteo, run through the same "+
+        "power curve as the forecast models: cut-in 3, rated 12, cut-out 25 m/s. Wind earns a far "+
+        "higher capture rate than solar because it also generates at night, when solar cannot "+
+        "depress the price.";
+      var svg=sub("c-wind"),W=900,H=190;
+      var a=axes(svg,W,H,52,14,18,24,0,rated*1.1,"MW",mw.length,hrs);
+      line(svg,a,mw,cv("--wind"),2);
+    }).catch(function(e){
+      adv.textContent="Live wind unavailable ("+e.message+"). Try again shortly.";
+    });
+}
+function renderBattery(){
+  var cap=parseFloat(document.getElementById("i-bmwh").value);
+  var eff=parseFloat(document.getElementById("i-beff").value)/100;
+  var adv=document.getElementById("a-batt");
+  if(!(cap>0)||!(eff>0)){adv.textContent="Enter a capacity and efficiency.";return;}
+  var f=D.forecast,p=f.p50.slice(),i0=nextHourIdx();
+  // One charge/discharge cycle a day: buy the cheapest hours, sell the dearest.
+  var idx=[];for(var i=i0;i<p.length;i++)idx.push(i);
+  var byPrice=idx.slice().sort(function(a,b){return p[a]-p[b];});
+  var nCyc=Math.min(4,Math.floor(idx.length/6))||1;
+  var buy=byPrice.slice(0,nCyc),sell=byPrice.slice(-nCyc);
+  var buyC=buy.reduce(function(s,i){return s+p[i];},0)/nCyc;
+  var sellP=sell.reduce(function(s,i){return s+p[i];},0)/nCyc;
+  var spread=sellP-buyC/eff;
+  var profit=spread*cap;
+  var sigs=f.signal.slice(i0);
+  statsHtml("o-batt",[
+    ["Best spread",num(spread,1)+" €/MWh","after "+num(eff*100,0)+"% round-trip loss"],
+    ["Expected revenue",(profit>0?"€"+num(profit,0):"—"),"one cycle of "+num(cap,1)+" MWh"],
+    ["Charge at",buy.map(function(i){return hLab(f.hours[i]);}).join(", "),
+      "avg "+num(buyC,1)+" €/MWh"],
+    ["Discharge at",sell.map(function(i){return hLab(f.hours[i]);}).join(", "),
+      "avg "+num(sellP,1)+" €/MWh"],
+    ["Policy signals",sigs.filter(function(s){return s==="STORE";}).length+" store / "+
+      sigs.filter(function(s){return s==="DISCHARGE"||s==="SELL";}).length+" sell","from the decision engine"]
+  ]);
+  adv.innerHTML=profit>0
+    ? "<b>Arbitrage looks viable.</b> Charging at the cheapest hours and discharging at the "+
+      "dearest clears the round-trip loss with "+num(spread,1)+" €/MWh to spare. This ignores "+
+      "degradation, grid fees and the risk that the forecast moves."
+    : "<b>Arbitrage does not clear costs today.</b> The spread between the cheapest and dearest "+
+      "hours is smaller than the round-trip loss, so cycling the battery would lose money.";
+}
 function renderEV(){
-  var box=document.getElementById("o-ev");
   var kwh=parseFloat(document.getElementById("i-kwh").value);
   var soc=parseFloat(document.getElementById("i-soc").value);
-  if(!(kwh>0)||!(soc>0)){box.innerHTML='<div class="err">Enter a battery size and charge amount.</div>';return;}
-  var need=kwh*soc/100,f=curData.forecast,p=f.p50,hrs=f.hours,cb=curData.carbon;
-
-  // The market data lags real time by a few hours, so the forecast window can
-  // OPEN in the past. "Now" has to mean the first hour that has not happened
-  // yet, otherwise we would price a charge against an hour already gone.
-  var nowMs=Date.now(),i0=0;
-  while(i0<hrs.length-1&&new Date(hrs[i0]).getTime()<nowMs)i0++;
-
-  var iBest=i0;for(var i=i0+1;i<p.length;i++)if(p[i]<p[iBest])iBest=i;
-  var costNow=need/1000*p[i0],costBest=need/1000*p[iBest];
+  var adv=document.getElementById("a-ev");
+  if(!(kwh>0)||!(soc>0)){adv.textContent="Enter a battery size and charge amount.";return;}
+  var need=kwh*soc/100,f=D.forecast,p=f.p50,hrs=f.hours,cb=D.carbon,i0=nextHourIdx();
+  var iB=i0;for(var i=i0+1;i<p.length;i++)if(p[i]<p[iB])iB=i;
+  var costNow=need/1000*p[i0],costBest=need/1000*p[iB];
   var save=costNow>0?(1-costBest/costNow)*100:0;
-  var waitH=Math.round((new Date(hrs[iBest])-new Date(hrs[i0]))/36e5);
-
-  var carbonBit="";
+  var waitH=Math.round((new Date(hrs[iB])-new Date(hrs[i0]))/36e5);
+  var rows=[
+    ["Cost if you wait","€"+num(costBest,2),"for "+num(need,0)+" kWh at "+hLab(hrs[iB])],
+    ["Cost right now","€"+num(costNow,2),"at "+hLab(hrs[i0])],
+    ["Saving",num(save,0)+"%","by waiting "+waitH+" h"]
+  ];
   if(cb&&cb.forecast_g_kwh&&cb.forecast_g_kwh.length===p.length){
     var g=cb.forecast_g_kwh,iC=i0;
     for(var k=i0+1;k<g.length;k++)if(g[k]<g[iC])iC=k;
-    carbonBit='<div><div class="lab">CO₂ at the cleanest hour</div>'+
-      '<div class="big">'+num(need*g[iC]/1000,1)+' <span style="font-size:13px">kg</span></div>'+
-      '<div class="note">'+num(need*g[i0]/1000,1)+' kg charging now · cleanest at '+
-      hourLab(hrs[iC])+' ('+num(g[iC],0)+' gCO₂/kWh)</div></div>';
+    rows.push(["Cleanest charge",num(need*g[iC]/1000,1)+" kg CO₂",
+      "at "+hLab(hrs[iC])+" vs "+num(need*g[i0]/1000,1)+" kg now"]);
   }
-  var ev=curData.ev;
-  box.innerHTML=
-    '<div class="split"><div><div class="lab">Cost for '+num(need,0)+' kWh</div>'+
-      '<div class="big">€'+num(costBest,2)+'</div>'+
-      '<div class="note">€'+num(costNow,2)+' if you plug in now</div></div>'+carbonBit+'</div>'+
-    (save>1?'<p><b>Wait '+waitH+' h and pay '+num(save,0)+'% less.</b> The cheapest hour left '+
-      'in the window is '+hourLab(hrs[iBest])+' at '+num(p[iBest],0)+' €/MWh, against '+
-      num(p[i0],0)+' €/MWh for the hour starting '+hourLab(hrs[i0])+'.</p>'
-      :'<p>The next hour is already close to the cheapest one left in the window.</p>')+
-    (ev?'<p class="note">'+num(ev.total,0)+' public charging points mapped in OpenStreetMap here, '+
-      num(ev.fast_dc,0)+' of them DC rapid.</p>':'')+
-    '<p class="note">Wholesale day-ahead prices: the real bill applies only on a dynamic '+
-      'tariff, and excludes grid fees and taxes. The timing and the relative saving still hold.</p>';
+  if(D.ev)rows.push(["Charging points",num(D.ev.total,0),num(D.ev.fast_dc,0)+" DC rapid (OpenStreetMap)"]);
+  statsHtml("o-ev",rows);
+  adv.innerHTML=save>1
+    ? "<b>Wait "+waitH+" h and pay "+num(save,0)+"% less.</b> Cheapest hour is "+hLab(hrs[iB])+
+      " at "+num(p[iB],0)+" €/MWh, against "+num(p[i0],0)+" €/MWh for the hour starting "+
+      hLab(hrs[i0])+". Wholesale prices — the real bill only tracks this on a dynamic tariff."
+    : "<b>Now is already close to the cheapest hour left.</b> Wholesale prices — the real bill "+
+      "only tracks this on a dynamic tariff, and excludes grid fees and taxes.";
 }
 function renderTool(){
-  if(!curData)return;
+  if(!D)return;
   if(tool==="solar")renderSolar();
   else if(tool==="wind")renderWind();
+  else if(tool==="battery")renderBattery();
   else renderEV();
 }
 
-/* ================= panel ================= */
-function selectCountry(code){
-  var f=featById[code];if(!f)return;
-  cur=code;
-  document.getElementById("stage").classList.add("detail");
-  document.getElementById("hint").classList.add("gone");
-  d3.selectAll("#lands path").classed("sel",function(){
-    return this.getAttribute("data-code")===code;});
-  d3.select("#viewport").attr("transform",focusTransform(largest(f)));
-
-  d3.json("data/"+code+".json").then(function(d){
-    curData=d;site.lat=d.lat;site.lon=d.lon;fillPanel(d);
-  }).catch(function(e){
-    document.getElementById("d-name").textContent="Data unavailable";
-    document.getElementById("d-meta").textContent=e.message;});
+/* ================= chat (answers computed from the data) ================= */
+var CHAT_Q=[
+  {q:"Why are prices moving?",fn:function(){
+    var ex=D.explain;
+    if(!ex)return "I have no feature breakdown for this market.";
+    var f=ex.aggregate.features[0];
+    return "<b>"+esc(D.headline)+"</b><br><br>The biggest driver is <b>"+esc(f.label)+
+      "</b>, worth "+(f.effect_eur_mwh>0?"+":"")+num(f.effect_eur_mwh,1)+" €/MWh on average ("+
+      num(f.share_pct,0)+"% of the movement the model explains). Open <b>Explain prediction</b> "+
+      "on the forecast chart for the full Shapley breakdown.";}},
+  {q:"When should I charge my EV?",fn:function(){
+    var f=D.forecast,p=f.p50,i0=nextHourIdx(),iB=i0;
+    for(var i=i0+1;i<p.length;i++)if(p[i]<p[iB])iB=i;
+    var s="The cheapest hour left in the window is <b>"+hLab(f.hours[iB])+"</b> at "+
+      num(p[iB],0)+" €/MWh, against "+num(p[i0],0)+" €/MWh for the hour starting "+
+      hLab(f.hours[i0])+".";
+    if(D.carbon){var g=D.carbon.forecast_g_kwh,iC=i0;
+      for(var k=i0+1;k<g.length;k++)if(g[k]<g[iC])iC=k;
+      s+=" The <b>cleanest</b> hour is "+hLab(f.hours[iC])+" at "+num(g[iC],0)+" gCO₂/kWh.";}
+    return s;}},
+  {q:"How confident is the forecast?",fn:function(){
+    var m=D.metrics;
+    if(!m)return "This market has no out-of-sample evaluation yet.";
+    return "On "+m.holdout_days+" days the model never saw during training: generation error <b>"+
+      m.gen_mae_pct+"%</b>, and the price band contained the actual price <b>"+
+      m.price_coverage_pct+"%</b> of the time against an 80% target. "+
+      (m.price_coverage_pct>=75&&m.price_coverage_pct<=88
+        ? "That is well calibrated." : "That is off target, so treat the band with care.")+
+      " Sharpe on the signals was "+m.backtest_sharpe+".";}},
+  {q:"What should I do right now?",fn:function(){
+    var m=D.market,f=D.forecast,i0=nextHourIdx();
+    return "The market score is <b>"+m.score+"/100</b> → <b>"+m.recommendation+"</b>. "+
+      esc(m.rationale)+" The decision engine's signal for the hour starting "+
+      hLab(f.hours[i0])+" is <b>"+f.signal[i0]+"</b> — "+esc(f.signal_reason[i0]);}},
+  {q:"What could make this wrong?",fn:function(){
+    var ex=D.explain;
+    if(!ex||!ex.invalidators)return "No invalidation analysis for this market.";
+    return "<ul style='margin:6px 0 0;padding-left:17px'>"+
+      ex.invalidators.map(function(s){return "<li>"+esc(s)+"</li>";}).join("")+"</ul>";}},
+  {q:"How clean is the grid now?",fn:function(){
+    if(!D.carbon)return "No carbon data for this market.";
+    return "Carbon intensity is <b>"+num(D.carbon.now_g_kwh,0)+" gCO₂/kWh</b>. The cleanest hour "+
+      "in the next 24 h is <b>"+hLab(D.carbon.cleanest_hour_utc)+"</b> at "+
+      num(D.carbon.cleanest_g_kwh,0)+" gCO₂/kWh. Renewables covered "+
+      num(D.kpis.renewable_share_pct,0)+"% of demand over the last 88 days.";}}
+];
+function chatSay(html,who){
+  var log=document.getElementById("chat-log");
+  var d=document.createElement("div");d.className="msg "+(who||"a");
+  d.innerHTML=html;log.appendChild(d);log.scrollTop=log.scrollHeight;
 }
-function fillPanel(d){
-  document.getElementById("d-flag").style.backgroundImage="url("+FLAG+d.code+".svg)";
-  document.getElementById("d-name").textContent=d.name_en;
-  document.getElementById("d-meta").textContent=
-    "Bidding zone "+d.bzn+" · updated "+fmtT(d.updated_utc);
-
-  // These are the last PUBLISHED values, and the feed runs a few hours behind
-  // real time — so they are stamped with the hour they belong to rather than
-  // called "now", which would be a small lie on every country.
-  var k=d.kpis,imp=k.net_import_gw;
-  var at=d.recent&&d.recent.hours&&d.recent.hours.length
-    ? " at "+hourLab(d.recent.hours[d.recent.hours.length-1]) : "";
-  var cells=[
-    ["Last price",num(k.last_price_eur_mwh,1),"€/MWh"+at],
-    ["Carbon",k.carbon_now_g_kwh!=null?num(k.carbon_now_g_kwh,0):"—","gCO₂/kWh"+at],
-    ["Renewables",num(k.renewable_share_pct,0),"% of demand, 88 d avg"],
-    [imp!=null&&imp<0?"Net export":"Net import",imp!=null?num(Math.abs(imp),2):"—","GW, 88 d avg"]];
-  document.getElementById("k-now").innerHTML=cells.map(function(c){
-    return '<div class="kpi"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+
-      '</div><div class="u">'+c[2]+'</div></div>';}).join("");
-
-  var fw=document.getElementById("flows-wrap");
-  if(d.flows&&d.flows.length){
-    fw.style.display="";
-    var mx=d3.max(d.flows,function(f){return Math.abs(f.net_gw);})||1;
-    document.getElementById("flows-list").innerHTML=d.flows.map(function(f){
-      var w=Math.abs(f.net_gw)/mx*50,into=f.net_gw>0;
-      return '<div class="fl-row"><span class="nm">'+f.name+'</span>'+
-        '<span class="track"><span class="mid"></span><span class="fill" style="'+
-        (into?"left:50%":"left:"+(50-w)+"%")+";width:"+w+"%;background:"+
-        (into?cv("--pos"):cv("--copper"))+'"></span></span>'+
-        '<span class="gw">'+(into?"+":"−")+num(Math.abs(f.net_gw),2)+" GW</span></div>";
-    }).join("");
-  }else fw.style.display="none";
-
-  var f=d.forecast;
-  priceBand("c-price",f.hours,f.p10,f.p50,f.p90,null);
-  stackedArea("c-gen",f.hours,f.wind_mw,f.solar_mw);
-  signalStrip("c-sig",f.hours,f.signal,f.signal_reason);
-
-  var cw=document.getElementById("carbon-wrap");
-  if(d.carbon){cw.style.display="";
-    twoLines("c-carbon",f.hours,f.hours.map(function(){return null;}),
-      d.carbon.forecast_g_kwh,"gCO₂/kWh",cv("--zinc"),cv("--carbon"));
-  }else cw.style.display="none";
-
-  if(d.capacity)capacityChart("c-cap",d.capacity);
-  else document.getElementById("grid-sec").style.display="none";
-
-  var ts=document.getElementById("track-sec");
-  if(d.metrics){
-    ts.style.display="";
-    var m=d.metrics;
-    document.getElementById("cred").innerHTML=[
-      ["Generation error",m.gen_mae_pct+"%","mean abs. error over "+m.holdout_days+" held-out days"],
-      ["Band coverage",m.price_coverage_pct+"%","actual price inside P10–P90 (target 80%)"],
-      ["Strategy edge",(m.backtest_edge_pct>0?"+":"")+m.backtest_edge_pct+"%","vs sell-everything-now, same costs"],
-      ["Sharpe",m.backtest_sharpe,"risk-adjusted return of the signals"]
-    ].map(function(c){
-      return '<div class="cc"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+
-        '</div><div class="d">'+c[2]+'</div></div>';}).join("");
-    var rw=document.getElementById("replay-wrap");
-    if(d.replay){rw.style.display="";
-      twoLines("c-rgen",d.replay.hours,d.replay.gen_forecast_mw,d.replay.gen_actual_mw,
-        "MW",cv("--copper"),cv("--ink"));
-      priceBand("c-rprice",d.replay.hours,d.replay.price_p10,d.replay.price_p50,
-        d.replay.price_p90,d.replay.price_actual);
-    }else rw.style.display="none";
-  }else ts.style.display="none";
-
-  document.getElementById("sources").textContent=
-    "Generation, price, carbon and cross-border flows: Energy-Charts (Fraunhofer ISE). "+
-    "Weather: Open-Meteo. Solar yield: PVGIS (EU JRC). Charging points: OpenStreetMap "+
-    "(ODbL). All forecasts are this project's own models.";
-  renderTool();
+function chatAnswer(q){
+  var low=q.toLowerCase(),best=null,bs=0;
+  CHAT_Q.forEach(function(c){
+    var words=c.q.toLowerCase().replace(/[?,]/g,"").split(/\s+/);
+    var s=words.filter(function(w){return w.length>3&&low.indexOf(w)>=0;}).length;
+    if(s>bs){bs=s;best=c;}
+  });
+  if(low.match(/charg|ev|car/))best=CHAT_Q[1];
+  else if(low.match(/confiden|accurat|trust|reliab/))best=CHAT_Q[2];
+  else if(low.match(/wrong|invalid|risk/))best=CHAT_Q[4];
+  else if(low.match(/clean|carbon|co2|green/))best=CHAT_Q[5];
+  else if(low.match(/do|action|buy|sell|recommend/)&&!low.match(/why/))best=CHAT_Q[3];
+  else if(low.match(/why|driver|falling|rising|mov/))best=CHAT_Q[0];
+  if(!best||bs===0&&!best)
+    return "I can only answer from this market's own numbers. Try one of the suggested "+
+      "questions below — those I can answer exactly.";
+  return best.fn();
 }
-function deselect(){
-  cur=null;curData=null;
-  document.getElementById("stage").classList.remove("detail");
-  d3.selectAll("#lands path").classed("sel",false);
-  d3.select("#viewport").attr("transform",null);
+function initChat(){
+  var host=sub("chat-chips");
+  CHAT_Q.forEach(function(c){
+    var b=document.createElement("button");b.className="chip";b.textContent=c.q;
+    b.addEventListener("click",function(){
+      chatSay(esc(c.q),"u");
+      setTimeout(function(){chatSay(c.fn()+'<span class="n">Computed from '+
+        esc(D.name_en)+"'s data — not a language model.</span>");},160);
+    });
+    host.appendChild(b);
+  });
 }
 
-/* ================= geometry ================= */
-function largest(feat){
-  if(feat.geometry.type!=="MultiPolygon")return feat;
-  var big=feat.geometry.coordinates[0],a=0;
-  feat.geometry.coordinates.forEach(function(poly){
-    var s=Math.abs(d3.polygonArea(poly[0]));if(s>a){a=s;big=poly;}});
-  return {type:"Feature",properties:feat.properties,
-    geometry:{type:"Polygon",coordinates:big}};
+/* ================= map ================= */
+var METRICS={
+  none:{},
+  last_price_eur_mwh:{unit:"€/MWh",ramp:["#2A2018","#5C3A22","#8A542C","#B4703A","#E0834F"]},
+  carbon_now_g_kwh:{unit:"gCO₂/kWh",ramp:["#12251A","#1D4230","#2F6449","#4C8A66","#6FB189"]},
+  renewable_share_pct:{unit:"% of demand",ramp:["#131E2E","#1B3350","#254C77","#33689F","#4585C9"]},
+  // Charger counts are normalised by area: shading by an absolute total would
+  // just rank countries by size, putting Germany top for being large.
+  ev_density:{unit:"points per 1000 km²",ramp:["#1E1A2A","#332A47","#4A3B68","#63508B","#7F69AE"],
+    derive:function(c){var n=IDX[c]&&IDX[c].kpis.ev_chargers,a=areaKm2(c);
+      return (n==null||!a)?null:n/(a/1000);}}
+};
+var _area={},FRAME={lon:[-11,34],lat:[34,71]};
+function areaKm2(c){
+  if(_area[c]!==undefined)return _area[c];
+  var f=featById[c];
+  if(!f){_area[c]=null;return null;}
+  var polys=f.geometry.type==="MultiPolygon"
+    ? f.geometry.coordinates.map(function(x){return {type:"Polygon",coordinates:x};})
+    : [f.geometry];
+  var t=0;
+  polys.forEach(function(p){var ctr=d3.geoCentroid(p);
+    if(ctr[0]>=FRAME.lon[0]&&ctr[0]<=FRAME.lon[1]&&ctr[1]>=FRAME.lat[0]&&ctr[1]<=FRAME.lat[1])
+      t+=d3.geoArea(p)*6371*6371;});
+  _area[c]=t||null;return _area[c];
 }
-function focusTransform(feat){
-  var b=PATH.bounds(feat),bw=b[1][0]-b[0][0],bh=b[1][1]-b[0][1];
-  var cx=(b[0][0]+b[1][0])/2,cy=(b[0][1]+b[1][1])/2;
-  // preserveAspectRatio="meet" keeps the WHOLE viewBox on screen and just
-  // letterboxes it when the panel narrows the map column — the viewBox is
-  // never cropped. So the country centres on the viewBox centre, not on some
-  // fraction of it, and 0.55 leaves a ring of neighbours for context.
-  var s=Math.max(1.2,Math.min(Math.min(VBW/bw,VBH/bh)*0.55,7));
-  return "translate("+(VBW/2-cx*s)+","+(VBH/2-cy*s)+") scale("+s+")";
+function mVal(c,m){
+  var M=METRICS[m];if(!M)return null;
+  var v=M.derive?M.derive(c):(IDX[c]&&IDX[c].kpis[m]);
+  return (v==null||!isFinite(v))?null:v;
 }
-
-/* ================= the flow network ================= */
+function paintMap(){
+  var sel=d3.select("#lands").selectAll("path.data"),lg=document.getElementById("maplegend");
+  if(metric==="none"){sel.style("fill",null);lg.innerHTML="";lg.style.display="none";return;}
+  var vals=[];for(var c in IDX){var v=mVal(c,metric);if(v!=null)vals.push(v);}
+  if(vals.length<2){sel.style("fill",null);lg.innerHTML="";lg.style.display="none";return;}
+  lg.style.display="";
+  var sc=d3.scaleQuantile().domain(vals).range(METRICS[metric].ramp);
+  sel.style("fill",function(){var v=mVal(this.getAttribute("data-code"),metric);
+    return v==null?null:sc(v);});
+  var ex=d3.extent(vals),b=[ex[0]].concat(sc.quantiles(),[ex[1]]);
+  var dp=ex[1]<10?1:0;
+  lg.innerHTML=METRICS[metric].ramp.map(function(col,i){
+    return '<div class="row"><span class="sw" style="background:'+col+'"></span>'+
+      num(b[i],dp)+" – "+num(b[i+1],dp)+"</div>";}).join("")+
+    '<div class="row" style="margin-top:5px;color:var(--ink-3)">'+METRICS[metric].unit+'</div>';
+}
+function largest(f){
+  if(f.geometry.type!=="MultiPolygon")return f;
+  var big=f.geometry.coordinates[0],a=0;
+  f.geometry.coordinates.forEach(function(p){
+    var s=Math.abs(d3.polygonArea(p[0]));if(s>a){a=s;big=p;}});
+  return {type:"Feature",properties:f.properties,geometry:{type:"Polygon",coordinates:big}};
+}
+function inFill(elm,x,y){var p=document.getElementById("map").createSVGPoint();
+  p.x=x;p.y=y;return elm.isPointInFill(p);}
+function anchorFor(c,elm){
+  var ctr=PATH.centroid(largest(featById[c]));
+  if(!isFinite(ctr[0])||!isFinite(ctr[1]))return null;
+  if(inFill(elm,ctr[0],ctr[1]))return ctr;
+  var b=elm.getBBox(),N=20,ins=[],outs=[];
+  for(var i=0;i<N;i++)for(var j=0;j<N;j++){
+    var x=b.x+b.width*(i+.5)/N,y=b.y+b.height*(j+.5)/N;
+    (inFill(elm,x,y)?ins:outs).push([x,y]);}
+  if(!ins.length)return ctr;
+  var best=ins[0],bd=-1;
+  ins.forEach(function(p){var d=1e9;
+    outs.forEach(function(q){var t=Math.pow(p[0]-q[0],2)+Math.pow(p[1]-q[1],2);if(t<d)d=t;});
+    if(d>bd){bd=d;best=p;}});
+  return best;
+}
 function drawFlows(g){
-  if(!FLOWS||!FLOWS.edges||!FLOWS.edges.length)return;
+  if(!FLOWS||!FLOWS.edges)return;
   var mx=d3.max(FLOWS.edges,function(e){return e.gw;})||1;
   FLOWS.edges.forEach(function(e){
     var A=FLOWS.coords[e.src],B=FLOWS.coords[e.dst];
     if(!A||!B)return;
     var p=PROJ([A.lon,A.lat]),q=PROJ([B.lon,B.lat]);
     if(!p||!q||!isFinite(p[0])||!isFinite(q[0]))return;
-    // Bow each link so parallel corridors stay legible instead of overlapping.
-    var dx=q[0]-p[0],dy=q[1]-p[1],len=Math.hypot(dx,dy)||1;
-    var cx=(p[0]+q[0])/2-dy*0.13,cy=(p[1]+q[1])/2+dx*0.13;
+    var dx=q[0]-p[0],dy=q[1]-p[1];
+    var cx=(p[0]+q[0])/2-dy*.13,cy=(p[1]+q[1])/2+dx*.13;
     var d="M"+p[0]+","+p[1]+" Q"+cx+","+cy+" "+q[0]+","+q[1];
-    var w=0.7+e.gw/mx*2.6;
-    g.append("path").attr("class","flow").attr("d",d).attr("stroke-width",w*0.5);
-    g.append("path").attr("class","flow-dash").attr("d",d)
-      .attr("stroke-width",w).attr("stroke-dasharray","1.5 9")
-      // Bigger flows drift faster: speed encodes magnitude.
+    var w=.6+e.gw/mx*2.4;
+    g.append("path").attr("class","flow").attr("d",d).attr("stroke-width",w*.5);
+    g.append("path").attr("class","flow-dash").attr("d",d).attr("stroke-width",w)
+      .attr("stroke-dasharray","1.5 9")
       .style("animation-duration",(2.6-Math.min(e.gw/mx,1)*1.5).toFixed(2)+"s");
   });
 }
-
-/* ================= flags ================= */
-/* 28 flags on a Mercator Europe collide badly around the Benelux and the
-   Balkans. Rather than hand-nudge each one, run a short force relaxation and
-   draw a leader line wherever a flag lands off its country — the same device
-   cartographers use for crowded labels. */
-function inFill(pathEl,x,y){
-  var p=document.getElementById("map").createSVGPoint();
-  p.x=x;p.y=y;
-  return pathEl.isPointInFill(p);
-}
-/* A centroid is the average of a shape, which for a concave one need not lie
-   inside it: Croatia is a crescent and Norway is mostly fjord, so both put
-   their flag in the sea. When that happens, grid-search the bounding box for
-   the interior point furthest from the coastline — a cheap pole of
-   inaccessibility, run once at load. */
-function anchorFor(code,pathEl){
-  var c=PATH.centroid(largest(featById[code]));
-  if(!isFinite(c[0])||!isFinite(c[1]))return null;
-  if(inFill(pathEl,c[0],c[1]))return c;
-
-  var b=pathEl.getBBox(),N=22,inside=[],outside=[];
-  for(var i=0;i<N;i++)for(var j=0;j<N;j++){
-    var x=b.x+b.width*(i+0.5)/N,y=b.y+b.height*(j+0.5)/N;
-    (inFill(pathEl,x,y)?inside:outside).push([x,y]);
-  }
-  if(!inside.length)return c;
-  var best=inside[0],bestD=-1;
-  inside.forEach(function(p){
-    var d=1e9;
-    outside.forEach(function(q){
-      var t=Math.pow(p[0]-q[0],2)+Math.pow(p[1]-q[1],2);
-      if(t<d)d=t;});
-    if(d>bestD){bestD=d;best=p;}});
-  return best;
-}
 function placeFlags(g,codes){
-  var FW=27,FH=FW*0.72;
-  var pathFor={};
-  d3.selectAll("#lands path.data").each(function(){pathFor[this.getAttribute("data-code")]=this;});
-
+  var FW=23,FH=FW*.72,pf={};
+  d3.selectAll("#lands path.data").each(function(){pf[this.getAttribute("data-code")]=this;});
   var nodes=[];
-  codes.forEach(function(c){
-    var el=pathFor[c];if(!el)return;
-    var a=anchorFor(c,el);if(!a)return;
-    nodes.push({code:c,el:el,x0:a[0],y0:a[1],x:a[0],y:a[1]});
-  });
-
+  codes.forEach(function(c){var e=pf[c];if(!e)return;
+    var a=anchorFor(c,e);if(!a)return;
+    nodes.push({code:c,el:e,x0:a[0],y0:a[1],x:a[0],y:a[1]});});
   d3.forceSimulation(nodes)
     .force("x",d3.forceX(function(n){return n.x0;}).strength(.9))
     .force("y",d3.forceY(function(n){return n.y0;}).strength(.9))
-    .force("collide",d3.forceCollide(FW*0.62).strength(1))
+    .force("collide",d3.forceCollide(FW*.62).strength(1))
     .stop().tick(300);
-
   nodes.forEach(function(n){
-    // A leader line earns its ink only when the flag no longer sits on its own
-    // country — displacement alone is the wrong test, since a flag can shift a
-    // little and still be home.
     if(!inFill(n.el,n.x,n.y))
-      g.append("line").attr("class","leader")
-        .attr("x1",n.x0).attr("y1",n.y0).attr("x2",n.x).attr("y2",n.y);
+      g.append("line").attr("class","leader").attr("x1",n.x0).attr("y1",n.y0)
+        .attr("x2",n.x).attr("y2",n.y);
     var f=g.append("g").attr("transform","translate("+(n.x-FW/2)+","+(n.y-FH/2)+")")
       .style("pointer-events","none");
-    f.append("rect").attr("class","flag-bg").attr("x",-1.3).attr("y",-1.3)
-      .attr("width",FW+2.6).attr("height",FH+2.6).attr("rx",2);
+    f.append("rect").attr("class","flag-bg").attr("x",-1.2).attr("y",-1.2)
+      .attr("width",FW+2.4).attr("height",FH+2.4).attr("rx",2);
     f.append("image").attr("href",FLAG+n.code+".svg").attr("width",FW).attr("height",FH)
       .attr("preserveAspectRatio","xMidYMid slice");
   });
 }
 
-/* ================= boot ================= */
-document.getElementById("back").addEventListener("click",deselect);
-document.addEventListener("keydown",function(e){if(e.key==="Escape"&&cur)deselect();});
-["i-kwp","i-mw","i-kwh","i-soc"].forEach(function(id){
-  document.getElementById(id).addEventListener("input",renderTool);});
-document.getElementById("tabs").addEventListener("click",function(e){
-  var b=e.target.closest("button");if(!b)return;
-  tool=b.dataset.tool;
-  d3.selectAll("#tabs button").attr("aria-selected",function(){return this===b;});
-  ["solar","wind","ev"].forEach(function(t){
-    document.getElementById("t-"+t).classList.toggle("on",t===tool);});
-  renderTool();});
+/* ================= country picker ================= */
+function buildPicker(){
+  var list=sub("cpick-list");
+  Object.keys(IDX).sort(function(a,b){
+    return IDX[a].name_en.localeCompare(IDX[b].name_en);}).forEach(function(c){
+    var r=document.createElement("div");r.className="cpick-row";r.setAttribute("role","option");
+    r.dataset.code=c;
+    r.innerHTML='<span class="fl" style="background-image:url('+FLAG+c+'.svg)"></span>'+
+      '<span>'+esc(IDX[c].name_en)+'</span>'+
+      '<span class="pr">'+num(IDX[c].kpis.last_price_eur_mwh,0)+' €</span>';
+    r.addEventListener("click",function(){load(c);
+      document.getElementById("cpick").classList.remove("open");});
+    list.appendChild(r);
+  });
+}
+function filterPicker(q){
+  q=q.toLowerCase();
+  d3.selectAll(".cpick-row").each(function(){
+    this.style.display=this.textContent.toLowerCase().indexOf(q)>=0?"":"none";});
+}
 
-var seg=document.getElementById("seg");
-Object.keys(METRICS).forEach(function(m){
-  var b=document.createElement("button");
-  b.textContent=METRICS[m].label;
-  b.setAttribute("aria-pressed",String(m===metric));
-  b.addEventListener("click",function(){
-    metric=m;
-    d3.selectAll("#seg button").attr("aria-pressed",function(){return String(this===b);});
-    paint();});
-  seg.appendChild(b);});
+/* ================= load + render ================= */
+function renderAll(){
+  var f=D.forecast;
+  priceChart("c-price",f.hours,f.p10,f.p50,f.p90,null);
+  genChart("c-gen",f.hours,f.wind_mw,f.solar_mw,f.demand_mw);
+  if(D.carbon)carbonChart("c-carbon",f.hours,D.carbon.forecast_g_kwh);
+  heatmap();
+  renderKpis();renderInsight();renderFlows();renderQuality();renderNews();renderRisk();
+  if(D.capacity)capChart("c-cap",D.capacity);
+  else document.getElementById("capsec").style.display="none";
+  renderExplain();renderTool();
+  document.getElementById("price-sub").textContent=
+    "updated "+new Date(D.updated_utc).toLocaleString("en-GB",
+      {day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})+" · times in your timezone";
+}
+function load(c){
+  code=c;
+  var m=IDX[c];
+  document.getElementById("cpick-name").textContent=m?m.name_en:c;
+  document.getElementById("cpick-flag").style.backgroundImage="url("+FLAG+c+".svg)";
+  d3.selectAll(".cpick-row").classed("on",function(){return this.dataset.code===c;});
+  d3.selectAll("#lands path.data").classed("sel",function(){
+    return this.getAttribute("data-code")===c;});
+  try{localStorage.setItem("gt-country",c);}catch(e){}
+  return d3.json("data/"+c+".json").then(function(d){
+    D=d;site.lat=d.lat;site.lon=d.lon;
+    var log=sub("chat-log");
+    chatSay("Ask me about <b>"+esc(d.name_en)+"</b>. I answer from this market's own "+
+      "numbers — the same ones on the page.<span class='n'>Not a language model: every "+
+      "answer is computed from the loaded data.</span>");
+    renderAll();
+  }).catch(function(e){
+    document.getElementById("ins-headline").textContent="Could not load "+c+": "+e.message;
+  });
+}
+
+/* ================= boot ================= */
+document.getElementById("btn-theme").addEventListener("click",function(){
+  setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");});
+document.getElementById("btn-settings").addEventListener("click",function(){
+  document.getElementById("modal-t").textContent="Settings & data sources";
+  document.getElementById("modal-sub").textContent="What this dashboard is built on";
+  document.getElementById("modal-body").innerHTML=
+    '<div class="sec-t">Theme</div><p style="font-size:13px;color:var(--ink-2);margin:0">'+
+    'Use the moon/sun button in the top bar. Your choice is remembered in this browser.</p>'+
+    '<div class="sec-t">Where the numbers come from</div><ul class="mlist">'+
+    '<li><b>Energy-Charts</b> (Fraunhofer ISE) — generation, day-ahead price, carbon intensity, '+
+    'cross-border flows, installed capacity. No API key.</li>'+
+    '<li><b>Open-Meteo</b> — weather. The wind calculator calls it live from your browser.</li>'+
+    '<li><b>PVGIS</b> (EU JRC) — solar yield climatology, baked into a lattice.</li>'+
+    '<li><b>OpenStreetMap</b> — EV charging points (ODbL).</li>'+
+    '<li><b>Google News</b> — headlines, linked to their publishers.</li></ul>'+
+    '<div class="sec-t">What is a model output, not a measurement</div><ul class="mlist">'+
+    '<li>Price bands, generation, demand, carbon forecasts and every trading signal.</li>'+
+    '<li>The market score and recommendation are mechanical functions of those forecasts.</li>'+
+    '<li>The news impact tag is a keyword match, not analysis.</li></ul>'+
+    '<div class="sec-t">Known limits</div><ul class="mlist">'+
+    '<li>The upstream feed publishes a few hours behind real time.</li>'+
+    '<li>Solar yield is interpolated from a 2° lattice: ~10% error in mountains.</li>'+
+    '<li>All prices are wholesale day-ahead — not a retail bill.</li>'+
+    '<li>Nothing here is financial advice.</li></ul>';
+  openModal();});
+document.getElementById("btn-explain").addEventListener("click",function(){
+  document.getElementById("modal-t").textContent="Explain prediction";
+  renderExplain();openModal();});
+document.getElementById("modal-x").addEventListener("click",closeModal);
+document.getElementById("scrim").addEventListener("click",closeModal);
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){closeModal();
+    document.getElementById("chat").classList.remove("on");
+    document.getElementById("cpick").classList.remove("open");}});
+
+document.getElementById("btn-chat").addEventListener("click",function(){
+  document.getElementById("chat").classList.add("on");
+  document.getElementById("chat-q").focus();});
+document.getElementById("chat-x").addEventListener("click",function(){
+  document.getElementById("chat").classList.remove("on");});
+document.getElementById("chat-in").addEventListener("submit",function(e){
+  e.preventDefault();
+  var q=document.getElementById("chat-q").value.trim();
+  if(!q)return;
+  chatSay(esc(q),"u");
+  document.getElementById("chat-q").value="";
+  setTimeout(function(){chatSay(chatAnswer(q)+'<span class="n">Computed from '+
+    esc(D.name_en)+"'s data — not a language model.</span>");},160);});
+
+document.getElementById("cpick-btn").addEventListener("click",function(e){
+  e.stopPropagation();
+  var p=document.getElementById("cpick");
+  p.classList.toggle("open");
+  if(p.classList.contains("open"))document.getElementById("cpick-search").focus();});
+document.getElementById("cpick-search").addEventListener("input",function(){
+  filterPicker(this.value);});
+document.addEventListener("click",function(e){
+  if(!e.target.closest("#cpick"))document.getElementById("cpick").classList.remove("open");});
+
+document.getElementById("ptabs").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;
+  tool=b.dataset.p;
+  d3.selectAll("#ptabs button").attr("aria-selected",function(){return String(this===b);});
+  ["solar","wind","battery","ev"].forEach(function(t){
+    document.getElementById("p-"+t).classList.toggle("on",t===tool);});
+  renderTool();});
+["i-kwp","i-capex","i-mw","i-kwh","i-soc","i-bmwh","i-beff"].forEach(function(id){
+  document.getElementById(id).addEventListener("input",renderTool);});
+
+document.getElementById("mtabs").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;
+  metric=b.dataset.m;
+  d3.selectAll("#mtabs button").attr("aria-selected",function(){return String(this===b);});
+  paintMap();});
+document.getElementById("cap-toggle").addEventListener("click",function(){
+  var b=document.getElementById("cap-body"),on=b.style.display==="none";
+  b.style.display=on?"":"none";this.textContent=on?"Hide":"Show";
+  if(on&&D&&D.capacity)capChart("c-cap",D.capacity);});
+
+document.getElementById("navdate").textContent=
+  new Date().toLocaleDateString("en-GB",{weekday:"short",day:"2-digit",month:"short",year:"numeric"});
 
 Promise.all([
   d3.json("data/countries.json"),
@@ -931,69 +1597,78 @@ Promise.all([
   d3.json("data/solar_grid.json").catch(function(){return null;}),
   d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
 ]).then(function(res){
-  var idx=res[0];FLOWS=res[1];SOLAR=res[2];
-  idx.countries.forEach(function(c){COUNTRIES[c.code]=c;byName[c.name_en]=c.code;});
-  // world-atlas spells a few of these differently from our index.
+  FLOWS=res[1];SOLAR=res[2];
+  res[0].countries.forEach(function(c){IDX[c.code]=c;byName[c.name_en]=c.code;});
   var ALIAS={"Czech Republic":"cz","Czechia":"cz","Republic of Serbia":"rs",
              "Bosnia and Herz.":"ba","North Macedonia":"mk"};
-  Object.keys(ALIAS).forEach(function(n){if(COUNTRIES[ALIAS[n]])byName[n]=ALIAS[n];});
+  Object.keys(ALIAS).forEach(function(n){if(IDX[ALIAS[n]])byName[n]=ALIAS[n];});
 
   var feats=topojson.feature(res[3],res[3].objects.countries).features;
-  // Framed on the countries we actually serve, with margin so nothing crowds
-  // the edge. Past ~71°N Mercator is mostly stretched ice.
-  //
-  // MultiPoint, NOT Polygon, on purpose. d3-geo reads a spherical Polygon's
-  // winding order to decide which side is inside; wind the ring the wrong way
-  // and it silently means "the whole globe EXCEPT this box", so fitExtent
-  // scales the entire world down to fit — Europe ends up ~5x too small and
-  // cramped. Points carry no winding, so this framing cannot invert.
+  // MultiPoint, not Polygon: d3-geo reads a spherical polygon's winding order,
+  // and a reversed ring silently means "the whole globe except this box", which
+  // shrinks Europe ~5x. Points carry no winding, so this cannot invert.
   var corners={type:"MultiPoint",coordinates:[[-11,34],[34,34],[34,71],[-11,71]]};
-  PROJ=d3.geoMercator().fitExtent([[64,44],[VBW-64,VBH-44]],corners);
+  PROJ=d3.geoMercator().fitExtent([[46,26],[VBW-46,VBH-26]],corners);
   PATH=d3.geoPath(PROJ);
 
   var svg=d3.select("#map");
-  svg.append("rect").attr("width",VBW).attr("height",VBH).attr("fill",cv("--water"));
   var vp=svg.append("g").attr("id","viewport");
   var lands=vp.append("g").attr("id","lands");
   var flowG=vp.append("g").attr("id","flows");
   var flagG=vp.append("g").attr("id","flags");
-  var tip=document.getElementById("maptip"),wrap=document.getElementById("map-wrap");
+  var tip=document.getElementById("maptip"),wrap=document.getElementById("mapwrap");
 
   lands.selectAll("path").data(feats).join("path")
     .attr("d",PATH)
     .attr("class",function(f){return byName[f.properties.name]?"land data":"land";})
     .attr("data-code",function(f){return byName[f.properties.name]||null;})
     .on("mousemove",function(e,f){
-      var c=byName[f.properties.name];if(!c||!COUNTRIES[c])return;
-      var k=COUNTRIES[c].kpis,r=wrap.getBoundingClientRect();
+      var c=byName[f.properties.name];if(!c||!IDX[c])return;
+      var k=IDX[c].kpis,r=wrap.getBoundingClientRect();
       tip.style.display="block";
-      tip.style.left=Math.min(e.clientX-r.left+14,r.width-235)+"px";
-      tip.style.top=(e.clientY-r.top+14)+"px";
+      tip.style.left=Math.min(e.clientX-r.left+14,r.width-240)+"px";
+      tip.style.top=Math.min(e.clientY-r.top+14,r.height-90)+"px";
       tip.innerHTML='<div class="n"><span class="fi" style="background-image:url('+FLAG+c+
-        '.svg);background-size:cover"></span>'+COUNTRIES[c].name_en+'</div><div class="v">'+
+        '.svg)"></span>'+esc(IDX[c].name_en)+'</div><div class="v">'+
         num(k.last_price_eur_mwh,0)+' €/MWh'+
         (k.carbon_now_g_kwh!=null?' · '+num(k.carbon_now_g_kwh,0)+' gCO₂':'')+
-        ' · '+k.next_signal+'</div>';})
+        (IDX[c].market?' · '+esc(IDX[c].market.recommendation):'')+'</div>';})
     .on("mouseout",function(){tip.style.display="none";})
     .on("click",function(e,f){
       var c=byName[f.properties.name];
-      if(c)selectCountry(c);});
+      if(c){load(c);document.getElementById("kpis").scrollIntoView({behavior:"smooth",block:"start"});}
+      else if(D){ // open water: re-site the asset calculators
+        var ll=PROJ.invert(d3.pointer(e,document.getElementById("viewport")));
+        if(ll&&isFinite(ll[0])){site.lat=ll[1];site.lon=ll[0];
+          if(tool==="solar"||tool==="wind")renderTool();}}});
 
-  // While a country is open, clicking the map re-sites the solar/wind tools.
   svg.on("click",function(e){
-    if(!cur)return;
+    if(!D)return;
     var ll=PROJ.invert(d3.pointer(e,document.getElementById("viewport")));
     if(ll&&isFinite(ll[0])&&isFinite(ll[1])){
       site.lat=ll[1];site.lon=ll[0];
-      if(tool!=="ev")renderTool();}});
+      if(tool==="solar"||tool==="wind")renderTool();}});
 
   feats.forEach(function(f){var c=byName[f.properties.name];if(c)featById[c]=f;});
   drawFlows(flowG);
   placeFlags(flagG,Object.keys(featById));
-  paint();
-  document.getElementById("loading").style.display="none";
+
+  buildPicker();initChat();
+  document.getElementById("sources").textContent=
+    "Generation, price, carbon and cross-border flows: Energy-Charts (Fraunhofer ISE). "+
+    "Weather: Open-Meteo. Solar yield: PVGIS (EU JRC). Charging points: OpenStreetMap (ODbL). "+
+    "Headlines: Google News. All forecasts, signals and scores are this project's own models — "+
+    "not investment advice.";
+
+  var start="de";
+  try{var s=localStorage.getItem("gt-country");if(s&&IDX[s])start=s;}catch(e){}
+  if(!IDX[start])start=Object.keys(IDX)[0];
+  return load(start);
+}).then(function(){
+  setTheme(document.documentElement.getAttribute("data-theme"));
+  document.getElementById("boot").classList.add("gone");
 }).catch(function(e){
-  document.getElementById("loading").textContent="Could not load map data: "+e.message;
+  document.getElementById("boot").textContent="Could not load: "+e.message;
 });
 })();
 </script>

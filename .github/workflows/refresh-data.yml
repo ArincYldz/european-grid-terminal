@@ -25,6 +25,12 @@ jobs:
       - name: Refresh EV charger counts
         run: python webapp/build_ev_cache.py
         continue-on-error: true
+      # Same pattern: Google News throttles a burst of country queries, so the
+      # builder paces itself, only refetches what is over 6 h old, and keeps the
+      # previous headlines on failure.
+      - name: Refresh market news
+        run: python webapp/build_news_cache.py
+        continue-on-error: true
       - run: python webapp/precompute.py
       - name: Commit refreshed data
         run: |

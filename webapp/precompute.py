@@ -53,18 +53,28 @@ from src.ingestion.energy_extras import (
 )
 from src.models import GenerationForecaster, NegativePriceClassifier
 from src.models.conformal import ConformalizedQuantileForecaster
+from src.models.explain import (
+    aggregate_explanation,
+    explain_rows,
+    invalidators,
+    similar_days,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("precompute")
 
 SITE_DATA = Path(__file__).parent / "site" / "data"
 EV_CACHE = SITE_DATA / "ev_stations.json"
+NEWS_CACHE = SITE_DATA / "news.json"
 HISTORY_DAYS = 88
 FORECAST_HOURS = 24
 HOLDOUT_HOURS = 14 * 24        # 14 days held out for the skill metrics
 REPLAY_HOURS = 48             # last 48h of the holdout shown as forecast-vs-actual
 ASSET_FRACTION = 0.01
 PAUSE_BETWEEN_COUNTRIES_S = 3.0
+# Bumped whenever the feature set or model stack changes, so the dashboard can
+# state which model produced a number rather than implying one eternal "model".
+MODEL_VERSION = "2.1"
 
 FAST_GEN_PARAMS = dict(
     n_estimators=300, learning_rate=0.06, num_leaves=31, subsample=0.8,
@@ -205,7 +215,10 @@ def _run_pipeline(train_hist: pd.DataFrame, weather: pd.DataFrame,
     return {"wind": wind, "solar": solar, "gen": gen,
             "p10": q["p10"].to_numpy(), "p50": q["p50"].to_numpy(),
             "p90": q["p90"].to_numpy(), "risk": risk,
-            "train_prices": train_df["price_eur_mwh"].to_numpy()}
+            "train_prices": train_df["price_eur_mwh"].to_numpy(),
+            # Kept so the explainability layer can run TreeSHAP on the very
+            # model that produced these numbers, rather than a re-fit stand-in.
+            "_cqr": cqr, "_train_df": train_df, "_eval_df": eval_df}
 
 
 def _signals_for(gen: np.ndarray, p10, p50, p90, risk, hours, params) -> tuple[list, list]:
@@ -234,6 +247,136 @@ def _reason(kind: str, p50: float, risk: float) -> str:
     if kind == "CURTAIL":
         return f"Price in negative territory ({e} EUR/MWh, risk {round(risk*100)}%) — curtail production."
     return "No generation — no action."
+
+
+def _explain_block(fc: dict, future: pd.DatetimeIndex) -> dict | None:
+    """Open the black box: real TreeSHAP over the model that made the forecast.
+
+    Produces the per-hour decomposition the "Explain prediction" button shows,
+    an aggregate for the whole horizon, historical hours that resembled this
+    one, and the conditions that would invalidate the call.
+    """
+    cqr, train_df, eval_df = fc.get("_cqr"), fc.get("_train_df"), fc.get("_eval_df")
+    if cqr is None or eval_df is None or train_df is None:
+        return None
+    try:
+        median = cqr.base.models[0.5]
+        feats = cqr.base.features
+        per_row = explain_rows(median, eval_df, feats, top_n=5)
+        agg = aggregate_explanation(per_row, top_n=5)
+        sims = similar_days(train_df, eval_df.iloc[0], feats, k=3)
+        inval = invalidators(float(fc["p10"][0]), float(fc["p50"][0]),
+                             float(fc["p90"][0]), float(fc["risk"][0]),
+                             agg.get("features", []))
+    except Exception as exc:  # noqa: BLE001
+        log.info("  explainability unavailable: %s", str(exc)[:120])
+        return None
+
+    return {
+        "aggregate": agg,
+        "hourly": [{"hour": t.isoformat(), **r} for t, r in zip(future, per_row)],
+        "similar_days": sims,
+        "invalidators": inval,
+        "method": "Exact TreeSHAP (LightGBM pred_contrib) on the P50 model.",
+    }
+
+
+def _drivers_block(hist: pd.DataFrame, fc: dict, flows: list | None,
+                   carbon: dict | None) -> list[dict]:
+    """What is moving the market right now, as measured deltas.
+
+    Each row compares the next 24 h against the same 24 h a day earlier, so the
+    arrows are real changes rather than adjectives.
+    """
+    def delta(now: float, before: float, unit: str, name: str, good_up: bool | None):
+        if before is None or not np.isfinite(before) or not np.isfinite(now):
+            return None
+        diff = now - before
+        pct = (diff / abs(before) * 100.0) if before else 0.0
+        return {"name": name, "value": round(now, 1), "delta": round(diff, 1),
+                "delta_pct": round(pct, 1), "unit": unit,
+                "direction": "up" if diff > 0 else ("down" if diff < 0 else "flat"),
+                "good_up": good_up}
+
+    rows = []
+    last24 = hist.iloc[-24:]
+    prev24 = hist.iloc[-48:-24] if len(hist) >= 48 else None
+
+    solar_now = float(np.mean(fc["solar"]))
+    wind_now = float(np.mean(fc["wind"]))
+    if prev24 is not None:
+        rows.append(delta(solar_now, float(prev24["solar_mw"].mean()), "MW", "Solar", True))
+        rows.append(delta(wind_now, float(prev24["wind_mw"].mean()), "MW", "Wind", True))
+        rows.append(delta(float(last24["demand_mw"].mean()),
+                          float(prev24["demand_mw"].mean()), "MW", "Demand", False))
+        rows.append(delta(float(last24["price_eur_mwh"].mean()),
+                          float(prev24["price_eur_mwh"].mean()), "EUR/MWh", "Price", None))
+    if carbon and carbon.get("recent_g_kwh"):
+        vals = [v for v in carbon["recent_g_kwh"] if v is not None]
+        if len(vals) >= 48:
+            rows.append(delta(float(np.mean(vals[-24:])), float(np.mean(vals[-48:-24])),
+                              "gCO2/kWh", "Carbon", False))
+    if flows:
+        net = sum(f["net_gw"] for f in flows)
+        rows.append({"name": "Net imports", "value": round(net, 2), "delta": None,
+                     "delta_pct": None, "unit": "GW",
+                     "direction": "up" if net > 0 else "down", "good_up": None})
+    return [r for r in rows if r]
+
+
+def _market_score(fc: dict, hist: pd.DataFrame, signals: list[str]) -> dict:
+    """A 0-100 read on how attractive it is to SELL power over the horizon.
+
+    Deliberately mechanical, and stated as such in the UI: it blends where the
+    forecast sits in this country's own recent price distribution with the
+    policy's own signal mix. The label maps to the SAME decision engine that
+    drives the hourly signals, so the headline cannot disagree with the table
+    beneath it.
+    """
+    p50 = np.asarray(fc["p50"], dtype=float)
+    hist_p = hist["price_eur_mwh"].to_numpy(dtype=float)
+    pct = float((hist_p < np.mean(p50)).mean() * 100.0)      # price percentile
+
+    sell = sum(1 for s in signals if s in ("SELL", "DISCHARGE"))
+    store = sum(1 for s in signals if s in ("STORE", "CURTAIL"))
+    n = max(1, len(signals))
+    tilt = (sell - store) / n                                 # -1 .. +1
+
+    score = float(np.clip(0.6 * pct + 0.4 * (50 + 50 * tilt), 0, 100))
+    if score >= 75:
+        rec, tone = "Strong Sell", "The forecast sits high in this market's own range."
+    elif score >= 60:
+        rec, tone = "Sell", "Prices look above average for this market."
+    elif score >= 40:
+        rec, tone = "Hold", "The forecast is close to this market's normal range."
+    elif score >= 25:
+        rec, tone = "Buy", "Prices look cheap — favourable for charging or storing."
+    else:
+        rec, tone = "Strong Buy", "The forecast sits low in this market's own range."
+
+    return {"score": round(score), "recommendation": rec, "rationale": tone,
+            "price_percentile": round(pct),
+            "note": "Sell = good time to deliver power; Buy = good time to consume "
+                    "or store it. Derived from the same policy as the hourly signals."}
+
+
+def _headline(fc: dict, future: pd.DatetimeIndex) -> str:
+    """One sentence stating the forecast's main move, generated from the numbers."""
+    p50 = np.asarray(fc["p50"], dtype=float)
+    if len(p50) < 6:
+        return "Not enough forecast hours to summarise."
+    first, last = float(np.mean(p50[:6])), float(np.mean(p50[-6:]))
+    lo_i, hi_i = int(np.argmin(p50)), int(np.argmax(p50))
+    change = last - first
+    when_lo = future[lo_i].strftime("%H:%M")
+    when_hi = future[hi_i].strftime("%H:%M")
+    if abs(change) < max(3.0, abs(first) * 0.05):
+        return (f"Prices look steady near {round(float(np.mean(p50)))} EUR/MWh, "
+                f"dipping around {when_lo} and peaking around {when_hi}.")
+    verb = "fall" if change < 0 else "rise"
+    return (f"Prices are expected to {verb} about "
+            f"{round(abs(change))} EUR/MWh over the next 24 hours, "
+            f"with the cheapest hour around {when_lo} and the peak around {when_hi}.")
 
 
 def _capture_rates(hist: pd.DataFrame) -> dict:
@@ -265,15 +408,19 @@ def _capture_rates(hist: pd.DataFrame) -> dict:
     return out
 
 
-def _load_ev_cache() -> dict:
-    """EV charger counts built weekly by build_ev_cache.py (Overpass is too slow
-    to call from this nightly job). Absent file is fine — the panel just hides."""
-    if not EV_CACHE.exists():
+def _load_cache(path: Path, what: str) -> dict:
+    """Read a sidecar cache (EV counts, news). Absent is fine — the card hides.
+
+    Both live outside this job because their upstreams are slow and throttled:
+    hitting them once per country per night would be antisocial and would make
+    the nightly run fail for reasons that have nothing to do with forecasting.
+    """
+    if not path.exists():
         return {}
     try:
-        return json.loads(EV_CACHE.read_text(encoding="utf-8")).get("countries", {})
+        return json.loads(path.read_text(encoding="utf-8")).get("countries", {})
     except (ValueError, OSError) as exc:
-        log.warning("EV cache unreadable (%s) — continuing without it", exc)
+        log.warning("%s cache unreadable (%s) — continuing without it", what, exc)
         return {}
 
 
@@ -396,7 +543,8 @@ def _holdout(hist: pd.DataFrame, weather: pd.DataFrame) -> dict | None:
     }
 
 
-def process_country(c: Country, ev_cache: dict | None = None) -> dict | None:
+def process_country(c: Country, ev_cache: dict | None = None,
+                    news_cache: dict | None = None) -> dict | None:
     now = pd.Timestamp.now("UTC").floor("h")
     start = (now - pd.Timedelta(days=HISTORY_DAYS)).strftime("%Y-%m-%d")
     end = (now + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
@@ -448,6 +596,10 @@ def process_country(c: Country, ev_cache: dict | None = None) -> dict | None:
     capacity = _capacity_block(c)
     ev = (ev_cache or {}).get(c.code)
     capture = _capture_rates(hist)
+    explain = _explain_block(fc, future)
+    drivers = _drivers_block(hist, fc, flows, carbon)
+    market = _market_score(fc, hist, signals)
+    news = (news_cache or {}).get(c.code, {}).get("items")
 
     r1 = lambda a: [round(float(v), 1) for v in a]
     recent = hist.iloc[-48:]
@@ -457,6 +609,17 @@ def process_country(c: Country, ev_cache: dict | None = None) -> dict | None:
         "lat": c.lat, "lon": c.lon,
         "updated_utc": now.isoformat(),
         "capture": capture,
+        "headline": _headline(fc, future),
+        "market": market,
+        "drivers": drivers,
+        "model": {
+            "version": MODEL_VERSION,
+            "trained_utc": now.isoformat(),
+            "train_rows": int(len(hist)),
+            "history_days": HISTORY_DAYS,
+            "algorithms": "LightGBM (wind/solar/demand) + conformalised quantile "
+                          "regression (CQR) + isotonic-calibrated risk classifier",
+        },
         "kpis": {
             "last_price_eur_mwh": round(float(hist["price_eur_mwh"].iloc[-1]), 1),
             "gen_forecast_gw": round(float(np.mean(fc["gen"])) / 1000.0, 2),
@@ -468,6 +631,7 @@ def process_country(c: Country, ev_cache: dict | None = None) -> dict | None:
         "forecast": {
             "hours": [t.isoformat() for t in future],
             "wind_mw": r1(fc["wind"]), "solar_mw": r1(fc["solar"]),
+            "demand_mw": r1(demand_fc),
             "p10": r1(fc["p10"]), "p50": r1(fc["p50"]), "p90": r1(fc["p90"]),
             "neg_risk_pct": [round(float(v) * 100.0, 1) for v in fc["risk"]],
             "signal": signals, "signal_reason": reasons,
@@ -493,6 +657,10 @@ def process_country(c: Country, ev_cache: dict | None = None) -> dict | None:
     if ev:
         payload["ev"] = ev
         payload["kpis"]["ev_chargers"] = ev["total"]
+    if explain:
+        payload["explain"] = explain
+    if news:
+        payload["news"] = news
     return payload
 
 
@@ -546,13 +714,14 @@ def main(only: list[str] | None = None) -> None:
     SITE_DATA.mkdir(parents=True, exist_ok=True)
     targets = [c for c in COUNTRIES if not only or c.code in only]
     index, failed, payloads = [], [], []
-    ev_cache = _load_ev_cache()
+    ev_cache = _load_cache(EV_CACHE, "EV")
+    news_cache = _load_cache(NEWS_CACHE, "News")
 
     for c in targets:
         t0 = time.time()
         log.info("=== %s (%s) ===", c.name_en, c.code)
         try:
-            payload = process_country(c, ev_cache)
+            payload = process_country(c, ev_cache, news_cache)
         except Exception as exc:  # noqa: BLE001
             log.warning("  %s FAILED: %s", c.code, str(exc)[:200])
             failed.append(c.code); time.sleep(PAUSE_BETWEEN_COUNTRIES_S); continue
@@ -562,7 +731,8 @@ def main(only: list[str] | None = None) -> None:
         (SITE_DATA / f"{c.code}.json").write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         payloads.append(payload)
-        idx = {"code": c.code, "name_en": c.name_en, "kpis": payload["kpis"]}
+        idx = {"code": c.code, "name_en": c.name_en, "kpis": payload["kpis"],
+               "headline": payload.get("headline"), "market": payload.get("market")}
         if "metrics" in payload:
             idx["metrics"] = payload["metrics"]
         index.append(idx)

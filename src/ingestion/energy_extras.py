@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import time
+from xml.etree import ElementTree
 
 import pandas as pd
 import requests
@@ -203,6 +204,77 @@ def _count_from(payload: dict) -> int:
         if el.get("type") == "count":
             return int(el.get("tags", {}).get("nodes", 0))
     raise DataQualityError("Overpass returned no count element.")
+
+
+def fetch_energy_news(country_name: str, limit: int = 6) -> list[dict]:
+    """Recent electricity-market headlines for a country, via Google News RSS.
+
+    Real headlines linking to real publishers — the dashboard never invents a
+    story. Keyless, but it does need a browser-ish User-Agent and it has no
+    CORS header, so it runs here rather than in the page.
+
+    The `impact` tag is a crude KEYWORD match, not analysis, and the UI labels
+    it that way. Anything else would be dressing up a word search as insight.
+    """
+    q = f"{country_name} electricity prices OR power market OR grid"
+    url = ("https://news.google.com/rss/search?q=" + requests.utils.quote(q)
+           + "&hl=en-US&gl=US&ceid=US:en")
+
+    # Google throttles hard once a burst of country queries goes out, so back
+    # off rather than hammering it. Callers cache the result anyway.
+    last = "unknown"
+    r = None
+    for attempt in range(3):
+        try:
+            r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=(5, 25))
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last = str(exc)[:80]
+            time.sleep(8.0 * (attempt + 1))
+            continue
+        if r.status_code == 429 or r.status_code >= 500:
+            last = f"HTTP {r.status_code}"
+            time.sleep(8.0 * (attempt + 1))
+            continue
+        break
+    if r is None or r.status_code == 429 or r.status_code >= 500:
+        raise ApiTransientError(f"News feed unavailable: {last}")
+    if r.status_code >= 400:
+        raise ApiPermanentError(f"News feed {r.status_code}")
+
+    try:
+        root = ElementTree.fromstring(r.content)
+    except ElementTree.ParseError as exc:
+        raise DataQualityError(f"News RSS could not be parsed: {exc}") from exc
+
+    down = ("fall", "drop", "plunge", "decline", "cheap", "surplus", "glut",
+            "negative", "lower", "slump")
+    up = ("rise", "surge", "soar", "jump", "spike", "shortage", "outage",
+          "higher", "climb", "crisis")
+
+    items = []
+    for node in root.findall(".//item")[:limit]:
+        title = (node.findtext("title") or "").strip()
+        if not title:
+            continue
+        low = title.lower()
+        hits_down = sum(w in low for w in down)
+        hits_up = sum(w in low for w in up)
+        # For a power BUYER, falling prices are the good case.
+        if hits_down > hits_up:
+            impact = "bullish"
+        elif hits_up > hits_down:
+            impact = "bearish"
+        else:
+            impact = "neutral"
+        items.append({
+            "title": title,
+            "url": (node.findtext("link") or "").strip(),
+            "source": (node.findtext("{*}source") or node.findtext("source") or "").strip(),
+            "published": (node.findtext("pubDate") or "").strip(),
+            "impact": impact,
+        })
+    logger.info("News: %d headlines (%s)", len(items), country_name)
+    return items
 
 
 def fetch_ev_charger_count(iso2: str) -> dict:
